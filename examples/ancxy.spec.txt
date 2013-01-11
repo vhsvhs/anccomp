@@ -1,0 +1,6 @@
+msapaths xy.fasta
+seed ta
+msaweight xy.fasta 1.0
+compare ancx.dat ancy.dat xy.fasta
+
+
