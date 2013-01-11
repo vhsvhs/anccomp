@@ -20,6 +20,7 @@
 #
 
 import math, os, re, sys, time
+from splash import *
 from argparser import *
 AA_ALPHABET = ["A", "R",    "N"  , "D" ,  "C"   , "Q"   , "E"  ,  "G"    ,"H"  ,  "I"  , "L"  ,  "K"  ,  "M"   , "F"  ,  "P"  ,  "S" ,   "T" ,  "W" ,  "Y" , "V"]
 D_SCALAR = 1000
@@ -115,7 +116,6 @@ def read_specs(p):
             msa_nodes[tokens[3]] = (tokens[1],tokens[2])
         elif l.startswith("msaweight"):
             tokens = l.split()
-            print tokens
             msa_weights[ tokens[1] ] = float(tokens[2])
     fin.close()
     return [msa_nodes, seed, msa_weights]
@@ -140,10 +140,10 @@ def align_msas(msapaths, seed):
         if len > longest_len:
             longest_len = len
             longest_msa = p
-        print "\n. OK,", p, "has", len, "sites."
+        print "\n. MSA [", p, "] has", len, "sites."
     #exit()
     
-    print "\n. OK, I'm aligning the alignments, using taxa", seed, "as the seed."
+    print "\n. I'm aligning the alignments, using taxa", seed, "as the seed."
     
     alg_focus_seq = {}
     for p in msapaths:
@@ -170,15 +170,14 @@ def align_msas(msapaths, seed):
     msa_refsite_mysite = {} # key = alg, value = hash, where key = site in longest alg, value = my site (or None)
     msa_mysite_refsite = {} # the reverse lookup of msa_refsite_mysite
     for alg in msapaths:
-        print "Aligning", alg, "to", longest_msa
+        print "\n. Aligning [", alg, "] to [", longest_msa, "]"
         msa_refsite_mysite[alg] = {}
         msa_mysite_refsite[alg] = {}
         ref_ptr = 1
         my_ptr = 1
         while my_ptr < alg_focus_seq[alg].__len__()+1 and ref_ptr < alg_focus_seq[longest_msa].__len__()+1:
-            #print my_ptr, ref_ptr
             if alg_focus_seq[alg][my_ptr-1] == alg_focus_seq[longest_msa][ref_ptr-1]:
-                print "anccomp 169: matching", my_ptr, "in", alg, "to", ref_ptr, "in", longest_msa, "states:", alg_focus_seq[alg][my_ptr-1], alg_focus_seq[longest_msa][ref_ptr-1]   
+                #print "anccomp 169: matching", my_ptr, "in", alg, "to", ref_ptr, "in", longest_msa, "states:", alg_focus_seq[alg][my_ptr-1], alg_focus_seq[longest_msa][ref_ptr-1]   
                 msa_refsite_mysite[alg][ref_ptr] = my_ptr
                 msa_mysite_refsite[alg][my_ptr] = ref_ptr
                 ref_ptr += 1
@@ -186,11 +185,9 @@ def align_msas(msapaths, seed):
                 #continue
             elif alg_focus_seq[longest_msa][ref_ptr-1] == "-":
                 while alg_focus_seq[longest_msa][ref_ptr-1] == "-" and ref_ptr < alg_focus_seq[longest_msa].__len__()+1:
-                    #print ref_ptr
                     ref_ptr += 1
             elif alg_focus_seq[alg][my_ptr-1] == "-":
                 while alg_focus_seq[alg][my_ptr-1] == "-" and my_ptr < alg_focus_seq[alg].__len__()+1:
-                    #print my_ptr
                     my_ptr += 1
     
     #print msa_refsite_mysite
@@ -204,14 +201,13 @@ def align_msas(msapaths, seed):
 # main part 1. . .
 # 
 # This block is all about reading the alignments and aligning the alignments
+show_splash()
 specpath = ap.getArg("--specpath")
 modelpath = ap.getArg("--modelpath")
 winsizes = ap.getList("--window_sizes", type=int)
 adir = get_anccomp_dir(ap)
 if not os.path.exists(adir):
     os.system("mkdir " + adir)
-if os.path.exists(adir + "/mlchanges.txt"):
-    os.system("rm " + adir + "/mlchanges.txt")
 [msa_nodes, seed, msa_weights] = read_specs( specpath ) #msa_nodes = hashtable, key = msapath, value = [anc. node 1 path, anc. node 2 path]
 m = get_matrix(modelpath)
 [longest_msa, msa_refsite_mysite, msa_mysite_refsite] = align_msas(msa_nodes.keys(), seed)
@@ -239,7 +235,6 @@ def compare_dat_files(patha, pathb, m, winsize):
     
     limstart = 0
     x = ap.getOptionalArg("--limstart")
-    print "\n. I'm limiting my analysis to sites", x, ".."
     if x != False:
         limstart = int(x)
     
@@ -538,7 +533,6 @@ def get_window_weights(N):
 def gauss_window_analaysis(data, winsize):
     """Smoothing with a Gaussian blur in 1 dimension."""
     window_weights = get_window_weights(winsize)
-    print "window weights", window_weights
     ret = {}
     sites = data.keys()
     sites.sort()
@@ -565,7 +559,6 @@ def blend_msa_data(msa_data):
 
     limstart = 0
     x = ap.getOptionalArg("--limstart")
-    print "\n. I'm limiting my analysis to sites", x, ".."
     if x != False:
         limstart = int(x)
 
@@ -582,23 +575,17 @@ def blend_msa_data(msa_data):
             if False == msa_refsite_mysite[alg].keys().__contains__( ref_site ):
                 bdata[ref_site] = 0.0
                 skip_this_site = True
-                #print "site", ref_site, "not found in", alg
-            #else:
-            #    print "site", ref_site, "is site", msa_refsite_mysite[alg][ref_site], "in", alg
-                
+
         if skip_this_site == False:
            for alg in msa_data:
-               
                 mysite = msa_refsite_mysite[alg][ref_site]
                 myscore = 0.0
                 if mysite != None:
                     myscore = msa_data[alg][mysite]
                 if mysite != None:
                     if ref_site in bdata:            
-                        #bdata[ref_site] += algweight * myscore
-                        bdata[ref_site] *= msa_weights[alg] * myscore
+                        bdata[ref_site] += (msa_weights[alg] * myscore)
                     else:
-                        #bdata[ref_site] = algweight * myscore
                         bdata[ref_site] = msa_weights[alg] * myscore
     return bdata
 
@@ -719,21 +706,9 @@ def rank_sites(blended_hdata):
             hscore_refsite[hval].append(s)
         else:
             hscore_refsite[hval] = [ s ]
-            
-        #rval = "%.5f"%blended_rdata[s]
-        #rval = blended_rdata[s]
-        #if rval in rscore_refsite:
-        #    rscore_refsite[rval].append(s)
-        #else:
-        #    rscore_refsite[rval] = [ s ]
-    #print "591"
-    #print hscore_refsite
-    #print rscore_refsite
     
     hscores = hscore_refsite.keys()
     hscores.sort(reverse=True)
-    #rscores = rscore_refsite.keys()
-    #rscores.sort(reverse=True)
 
     msa_thatanc_lines = {}
     msa_thisanc_lines = {}
@@ -747,34 +722,11 @@ def rank_sites(blended_hdata):
         msa_thisanc_lines[msapath] = fin.readlines() 
         fin.close()
         
-#    fout = open( get_table_outpath(ap, tag="r.ranked.txt"), "w")
-#    for i in range(0, rscores.__len__()):
-#        r = rscores[i]
-#        for refsite in rscore_refsite[r]:
-#            lout = "\n--> "
-#            #lout = "\n. Site "
-#            #lout += refsite.__str__()
-#            lout += " r= %.3f"%r
-#            lout += " rank: " + (i+1).__str__()
-#            #lout += " h= %.3f"%hscores[i]
-#            lout += "\n" 
-#            for msapath in msa_nodes:
-#                mys = msa_refsite_mysite[msapath][refsite]
-#                lout += msapath_to_short(msapath) + "\tr= %.3f"%msa_rscores[msapath][mys] + "\n"
-#                for l in msa_thatanc_lines[msapath]:
-#                    if l.startswith(mys.__str__() + " "):
-#                        lout += "   " + msapath_to_short(msa_nodes[msapath][0]) + " site " + l
-#                for l in msa_thisanc_lines[msapath]:
-#                    if l.startswith(mys.__str__() + " "):
-#                        lout += "   " + msapath_to_short(msa_nodes[msapath][1]) + " site " + l
-#            fout.write(lout)
-#    fout.close()
-
     fout = open( get_table_outpath(ap, tag="h.ranked.txt"), "w")
     for i in range(0, hscores.__len__()):
         h = hscores[i]
         for refsite in hscore_refsite[h]:
-            lout = "\n--> "
+            lout = "--> "
             #lout = "\n. Site "
             #lout += refsite.__str__()
             lout += " h= %.3f"%h
@@ -791,35 +743,9 @@ def rank_sites(blended_hdata):
                     for l in msa_thisanc_lines[msapath]:
                         if l.startswith(mys.__str__() + " "):
                             lout += "   " + msapath_to_short(msa_nodes[msapath][1]) + " site " + l
+            lout += "\n"
             fout.write(lout)
     fout.close()
-
-    #site_hrscores = {}
-    #for s in sites:
-    #    site_hscores[s] = 
-        
-#    fout = open( get_table_outpath(ap, tag="hr.ranked.txt"), "w")
-#    for i in range(0, hscores.__len__()):
-#        h = hscores[i]
-#        for refsite in hscore_refsite[h]:
-#            lout = "\n--> "
-#            #lout = "\n. Site "
-#            #lout += refsite.__str__()
-#            lout += " h= %.3f"%h
-#            lout += " rank: " + (i+1).__str__()
-#            #lout += " r= %.3f"%rscores[i]
-#            lout += "\n" 
-#            for msapath in msa_nodes:
-#                mys = msa_refsite_mysite[msapath][refsite]
-#                lout += msapath_to_short(msapath) + "\th= %.3f"%msa_hscores[msapath][mys] + "\n"
-#                for l in msa_thatanc_lines[msapath]:
-#                    if l.startswith(mys.__str__() + " "):
-#                        lout += "   " + msapath_to_short(msa_nodes[msapath][0]) + " site " + l
-#                for l in msa_thisanc_lines[msapath]:
-#                    if l.startswith(mys.__str__() + " "):
-#                        lout += "   " + msapath_to_short(msa_nodes[msapath][1]) + " site " + l
-#            fout.write(lout)
-#    fout.close()
 
 
 
@@ -832,17 +758,12 @@ msa_cscores = {} # basic conservation scores
 for msapath in msa_nodes:
     this_ancpath = msa_nodes[msapath][0]
     that_ancpath = msa_nodes[msapath][1]
-    print "\n. OK, I'm comparing", this_ancpath, "to", that_ancpath, "with smoothing =", w
+    print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "] with a smoothing window =", w
     hdata = compare_dat_files(this_ancpath, that_ancpath, m, w)
     
     msa_hscores[msapath] = hdata
     cdata = compute_cdata(msapath, w)
     #msa_cscores[msapath] = cdata
-
-    fout = open( get_anccomp_dir(ap) + "/mlchanges.txt", "w")
-    fout.write(this_ancpath + " --> " + that_ancpath + "\n")
-    fout.write(cdata.keys().__len__().__str__() + " total sites\n")
-    fout.close()
 
 """Average the data over multiple MSA algorithms...."""
 blended_hdata = blend_msa_data(msa_hscores)
@@ -873,8 +794,9 @@ for w in winsizes:
     
 """ Finally, execute all the R scripts. . ."""
 for c in cranpaths:
+    print "\n. I'm plotting results, using the R script written at [", c, "] . . ."
     os.system("r --no-save < " + c)
-    
-for p in msa_nodes:
-    len = get_msa_len(p)
-    print "\n. OK,", p, "has", len, "sites."
+
+print "\n\n. Finished.  Results were written to the folder", get_plot_outpath(ap)
+
+print "\n. Goodbye."
