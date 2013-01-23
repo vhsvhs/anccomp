@@ -22,13 +22,12 @@
 import math, os, re, sys, time
 from splash import *
 from argparser import *
-AA_ALPHABET = ["A", "R",    "N"  , "D" ,  "C"   , "Q"   , "E"  ,  "G"    ,"H"  ,  "I"  , "L"  ,  "K"  ,  "M"   , "F"  ,  "P"  ,  "S" ,   "T" ,  "W" ,  "Y" , "V"]
+AA_ALPHABET = ["A",  "R",    "N"  , "D" ,  "C"   , "Q"   , "E"  ,  "G"    ,"H"  ,  "I"  , "L"  ,  "K"  ,  "M"   , "F"  ,  "P"  ,  "S" ,   "T" ,  "W" ,  "Y" , "V"]
 D_SCALAR = 1000
 ap = ArgParser(sys.argv)
 COLORS = ["blue", "red", "green", "purple", "orange"]
 
 TINY = 0.001
-UNCERTAINPP = 0.6
 ENTROPY_CUTOFF = -0.2 
 
 
@@ -260,6 +259,7 @@ def compare_dat_files(patha, pathb, m, winsize):
         aptr += 1
         bptr += 1    
     windata = window_analysis(h, winsize, ap)
+    #print windata
     #consdata = window_analysis(r, winsize, ap)
     return windata
 
