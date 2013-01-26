@@ -33,18 +33,18 @@ def do_pymol_viz(ap, data, seedseq):
         if seedseq[ref_site] != "-":
             h = data[ref_site]
             if h > 0:
-                red = 1.0 - (h / maxh) * 0.8 + 0.2
-                green = 1.0 - (h / maxh) * 0.8 + 0.2
-                blue = 0.2
+                red = 1.0#0.9 + (h/maxh)*0.1
+                green = 1.0#0.9 + (h/maxh)*0.1
+                blue = 1.0 - (h/maxh)
             if h < 0:
-                blue = 1.0 - (h / minh) * 0.8 + 0.2
-                green = 1.0 - (h / minh) * 0.8 + 0.2
-                red = 0.2
+                blue = 1.0#0.9 + (h/minh)*0.1
+                green = 1.0#0.9 + (h/minh)*0.1
+                red = 1.0 - (h/minh)
             if h == 0:
-                blue = 0.9
-                green = 0.9
-                red = 0.9
-            print h, blue, green, red
+                blue = 1.0#0.9
+                green = 1.0#0.9
+                red = 1.0#0.9
+            print ref_site, seedseq[ref_site], h, blue, green, red
             this_color = "[" + red.__str__() + "," + green.__str__() + "," + blue.__str__() + "]"
             outlines += "cmd.set_color('color" + pdb_site.__str__() + "'," + this_color + ")\n"
             outlines += "cmd.color(\"color" + pdb_site.__str__() + "\", \"resi " + pdb_site.__str__() + "\")\n"
