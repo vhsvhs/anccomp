@@ -56,4 +56,6 @@ def do_pymol_viz(ap, data, seedseq):
     fout.write(outlines)
     fout.close()
     
+    print "\n\n. Run the script at " + os.getcwd() + "/" + scriptpath
+    
     #os.system(PYMOL + " " + scriptpath)

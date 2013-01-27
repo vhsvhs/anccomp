@@ -54,13 +54,15 @@ Compare ancestors, store results into msa_hscores
 """
 w = 1
 msa_hscores = {} # key = msa path, value = data from compare_dat_files
+msa_pscores = {}
 for msapath in msa_nodes:
     this_ancpath = msa_nodes[msapath][0]
     that_ancpath = msa_nodes[msapath][1]
     print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "] with a smoothing window =", w
-    hdata = compare_dat_files(this_ancpath, that_ancpath, m, w)
-    
+    hdata = compare_dat_files(this_ancpath, that_ancpath, m, w)    
     msa_hscores[msapath] = hdata
+    pdata = compare_dat_files(this_ancpath, that_ancpath, m, w, method="p")    
+    msa_pscores[msapath] = pdata
     cdata = compute_cdata(msapath, w)
 
 
@@ -69,24 +71,23 @@ Part 4:
 Integrate the results (i.e. msa_hscores) over multiple alignments.
 """
 blended_hdata = blend_msa_data(msa_hscores,msa_refsite_mysite,longest_msa,msa_weights)
-
+blended_pdata = blend_msa_data(msa_pscores,msa_refsite_mysite,longest_msa,msa_weights)
 
 """
 Part 5:
 Write output, including text tables and a PDF plot.
 """
+write_table(blended_hdata, msa_hscores, msa_refsite_mysite, longest_msa, method="h")
+rank_sites(blended_hdata, msa_nodes, msa_refsite_mysite, msa_hscores, method="h")
+
+write_table(blended_pdata, msa_pscores, msa_refsite_mysite, longest_msa, method="p")
+rank_sites(blended_pdata, msa_nodes, msa_refsite_mysite, msa_pscores, method="p")
+
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end.    
 for w in winsizes:
     blended_hdata = window_analysis(blended_hdata, w, ap)
+    blended_pdata = window_analysis(blended_pdata, w, ap)
         
-    """
-    Write text tables, 
-    but only for the non-smoothed data (i.e. w=1).
-    """
-    if w == 1:
-        write_table(blended_hdata, msa_hscores,msa_refsite_mysite,longest_msa)
-        rank_sites(blended_hdata,msa_nodes,msa_refsite_mysite,msa_hscores)
-            
     """ 
     Plot H scores, using R 
     """
@@ -100,6 +101,21 @@ for w in winsizes:
     plot_title = "H score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
     cranpath = plot( blended_hdata, plot_outpath, plot_title, "H score", "blue")
     cranpaths.append(cranpath)    
+
+    """ 
+    Plot P scores, using R 
+    """
+    plot_outpath = get_plot_outpath(ap, tag=("Pw=" + w.__str__()) )
+    combo_substring = ""
+    if False != ap.getOptionalArg("--combo_method"):
+        combo_substring = ", " + ap.getOptionalArg("--combo_method")
+    weight_substring = ""
+    if False != ap.getOptionalArg("--training_weight"):
+        weight_substring = ", weight=" + ap.getOptionalArg("--training_weight")
+    plot_title = "P score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
+    cranpath = plot( blended_pdata, plot_outpath, plot_title, "P score", "blue")
+    cranpaths.append(cranpath)    
+
 """
 Now execute all the R scripts.
 """
