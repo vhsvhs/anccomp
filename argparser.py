@@ -4,6 +4,7 @@ import sys
 class ArgParser:
     def __init__(self, cliArgs):
         self.args = cliArgs
+        self.params = {}
     
     # use this method to grab REQUIRED command-line parameters
     # flag = the command line flag.  For example: "--model".

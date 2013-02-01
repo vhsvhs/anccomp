@@ -1,6 +1,12 @@
 """
  USAGE:
- %> python compare_ancs.py --specpath <path1> --modelpath <path2> --window_sizes x y z
+ %> python compare_ancs.py --specpath <path1> --modelpath <path2> --window_sizes x y z 
+ 
+ OPTIONAL PARAMETERS:
+ --combo_method
+ --training_weight
+ --limstart
+ --metrics c, h, hp, and/or p
 
  path1 is the filepath to a specification file, formatted as shown below.
  path2 is the filepath to a text file containing a substitution matrix, such as JTT, WAG, LG, etc.
@@ -40,81 +46,101 @@ if not os.path.exists(adir):
 [msa_nodes, seed, msa_weights] = read_specs( specpath ) #msa_nodes[msapath] = [anc. node 1 path, anc. node 2 path]
 m = get_matrix(modelpath) # m is the Markovian substitution matrix.
 
+metrics = ap.getOptionalList("--metrics")
+if metrics == None:
+    metrics = ["h"]
+
+print metrics
+
 
 """ 
 Part 2:
 Align the alignments.
 """
 [longest_msa, msa_refsite_mysite, msa_mysite_refsite] = align_msas(msa_nodes.keys(), seed)
+"""
+NOTE:
+* longest_msa = the path to the longest of the alignments.  We'll use the numbering in the longest MSA
+as the reference numbering when we integrate results from multiple alignments.
+* msa_refsite_mysite = hashtable. key = msa path, value = hashtable, where key = site number in the longest MSA,
+and value = site number in the msa path
+* msa_mysite_refsite = hashtable. key = msa path, value = hashtable, where key = site number in msa path, value
+= site number in the longest MSA.
+"""
 
 
 """
 Part 3:
-Compare ancestors, store results into msa_hscores
+Compare the ancestors.
 """
 w = 1
-msa_hscores = {} # key = msa path, value = data from compare_dat_files
-msa_pscores = {}
+metric_data = {} # key = metric ID, value = hashtable of data
+if "h" in metrics:
+    metric_data["h"] = {}
+if "hp" in metrics:
+    metric_data["hp"] = {}
+if "p" in metrics:
+    metric_data["p"] = {}
+
 for msapath in msa_nodes:
     this_ancpath = msa_nodes[msapath][0]
     that_ancpath = msa_nodes[msapath][1]
     print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "] with a smoothing window =", w
-    hdata = compare_dat_files(this_ancpath, that_ancpath, m, w)    
-    msa_hscores[msapath] = hdata
-    pdata = compare_dat_files(this_ancpath, that_ancpath, m, w, method="p")    
-    msa_pscores[msapath] = pdata
-    cdata = compute_cdata(msapath, w)
-
+    for metric in metrics:
+        metric_data[metric][msapath] = compare_dat_files(this_ancpath, that_ancpath, m, w, method=metric)    
 
 """
 Part 4:
-Integrate the results (i.e. msa_hscores) over multiple alignments.
+Integrate the results over multiple alignments.
 """
-blended_hdata = blend_msa_data(msa_hscores,msa_refsite_mysite,longest_msa,msa_weights)
-blended_pdata = blend_msa_data(msa_pscores,msa_refsite_mysite,longest_msa,msa_weights)
+metric_blendeddata = {} # key = metric ID, value = hashtable of blended (i.e. integrated) data
+for metric in metrics:
+    metric_blendeddata[metric] = blend_msa_data(metric_data[metric],msa_refsite_mysite,longest_msa,msa_weights)
 
 """
 Part 5:
 Write output, including text tables and a PDF plot.
 """
-write_table(blended_hdata, msa_hscores, msa_refsite_mysite, longest_msa, method="h")
-rank_sites(blended_hdata, msa_nodes, msa_refsite_mysite, msa_hscores, method="h")
+metric_ranked = {}
+for metric in metrics:
+    write_table(metric_blendeddata[metric], metric_data[metric], msa_refsite_mysite, longest_msa, method=metric)
+    metric_ranked[metric] = rank_sites(metric_blendeddata[metric], msa_nodes, msa_refsite_mysite, metric_data[metric], method=metric)
 
-write_table(blended_pdata, msa_pscores, msa_refsite_mysite, longest_msa, method="p")
-rank_sites(blended_pdata, msa_nodes, msa_refsite_mysite, msa_pscores, method="p")
+if metrics.__len__() > 1:
+    comparisons = []
+    for i in range(0, metrics.__len__()):
+        for j in range(i, metrics.__len__()):
+            comparisons.append( (metrics[i], metrics[j]) )
+    comparison_rvals = []
+    for comparison in comparisons:
+        this_metric = comparison[0]
+        that_metric = comparison[1]
+        r = correlate_ranks(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric)
+        comparison_rvals.append( (this_metric, that_metric, r) )
+    
+    print "Comparison\tSpearman Rank\tPearson Value"
+    for element in comparison_rvals:
+        print element
 
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end.    
+w_metric_blendeddata = {} # key = window size for smoothing, value = hashtable, where key = metric ID, value = blended data
 for w in winsizes:
-    blended_hdata = window_analysis(blended_hdata, w, ap)
-    blended_pdata = window_analysis(blended_pdata, w, ap)
+    w_metric_blendeddata[w] = {}
+    for metric in metrics:
+        w_metric_blendeddata[w][metric] = {}
+        w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
         
-    """ 
-    Plot H scores, using R 
-    """
-    plot_outpath = get_plot_outpath(ap, tag=("Hw=" + w.__str__()) )
-    combo_substring = ""
-    if False != ap.getOptionalArg("--combo_method"):
-        combo_substring = ", " + ap.getOptionalArg("--combo_method")
-    weight_substring = ""
-    if False != ap.getOptionalArg("--training_weight"):
-        weight_substring = ", weight=" + ap.getOptionalArg("--training_weight")
-    plot_title = "H score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
-    cranpath = plot( blended_hdata, plot_outpath, plot_title, "H score", "blue")
-    cranpaths.append(cranpath)    
-
-    """ 
-    Plot P scores, using R 
-    """
-    plot_outpath = get_plot_outpath(ap, tag=("Pw=" + w.__str__()) )
-    combo_substring = ""
-    if False != ap.getOptionalArg("--combo_method"):
-        combo_substring = ", " + ap.getOptionalArg("--combo_method")
-    weight_substring = ""
-    if False != ap.getOptionalArg("--training_weight"):
-        weight_substring = ", weight=" + ap.getOptionalArg("--training_weight")
-    plot_title = "P score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
-    cranpath = plot( blended_pdata, plot_outpath, plot_title, "P score", "blue")
-    cranpaths.append(cranpath)    
+        plot_outpath = get_plot_outpath(ap, tag=(metric + ".w=" + w.__str__()) )
+        combo_substring = ""
+        if False != ap.getOptionalArg("--combo_method"):
+            combo_substring = ", " + ap.getOptionalArg("--combo_method")
+        weight_substring = ""
+        if False != ap.getOptionalArg("--training_weight"):
+            weight_substring = ", weight=" + ap.getOptionalArg("--training_weight")
+        plot_title = metric + " score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
+        cranpath = plot( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "blue")
+        cranpaths.append(cranpath)           
+        
 
 """
 Now execute all the R scripts.
@@ -127,9 +153,9 @@ for c in cranpaths:
 Part 6:
 If specified, visualize H scores on PyMol structure...
 """
-if False != ap.getOptionalArg("--pdb_path"):
-    seedseq = get_seq_from_msa(seed, longest_msa)
-    do_pymol_viz(ap, blended_hdata, seedseq)
+#if False != ap.getOptionalArg("--pdb_path"):
+#    seedseq = get_seq_from_msa(seed, longest_msa)
+#    do_pymol_viz(ap, blended_hdata, seedseq)
 
 print "\n\n. Finished.  Results were written to the folder", get_plot_outpath(ap)
 print "\n. Goodbye."
