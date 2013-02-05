@@ -50,7 +50,6 @@ metrics = ap.getOptionalList("--metrics")
 if metrics == None:
     metrics = ["h"]
 
-print metrics
 
 
 """ 
@@ -111,25 +110,24 @@ if metrics.__len__() > 1:
     for i in range(0, metrics.__len__()):
         for j in range(i, metrics.__len__()):
             comparisons.append( (metrics[i], metrics[j]) )
-    comparison_rvals = []
     for comparison in comparisons:
         this_metric = comparison[0]
         that_metric = comparison[1]
-        r = correlate_ranks(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric)
-        comparison_rvals.append( (this_metric, that_metric, r) )
-    
-    print "Comparison\tSpearman Rank\tPearson Value"
-    for element in comparison_rvals:
-        print element
-
+        r = correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric)
+        
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end.    
 w_metric_blendeddata = {} # key = window size for smoothing, value = hashtable, where key = metric ID, value = blended data
-for w in winsizes:
+for w in winsizes:    
     w_metric_blendeddata[w] = {}
     for metric in metrics:
         w_metric_blendeddata[w][metric] = {}
         w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
+    
+    if w == 1:
+        plot_outpath = get_plot_outpath(ap, tag=("histo" ) )
+        cranpath = plot_histogram(w_metric_blendeddata[w], plot_outpath)
         
+    for metric in metrics:
         plot_outpath = get_plot_outpath(ap, tag=(metric + ".w=" + w.__str__()) )
         combo_substring = ""
         if False != ap.getOptionalArg("--combo_method"):
@@ -140,8 +138,8 @@ for w in winsizes:
         plot_title = metric + " score, winsize = " + w.__str__() + combo_substring + weight_substring + ", " + time.asctime().__str__() + ""
         cranpath = plot( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "blue")
         cranpaths.append(cranpath)           
-        
 
+        
 """
 Now execute all the R scripts.
 """

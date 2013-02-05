@@ -131,6 +131,7 @@ def read_specs(p):
         if l.startswith("msapaths"):
             tokens = l.split()
             for t in tokens[1:]:
+                ap.params["msaname"][t] = t
                 msa_nodes[t] = None
         elif l.startswith("seed"):
             tokens = l.split()
@@ -149,8 +150,19 @@ def read_specs(p):
     ap.params["seed"] = seed
     ap.params["msa_weights"] = msa_weights
     
-    print ap.params["msaname"]
+    #check_specs()
+    
     return [msa_nodes, seed, msa_weights]
+
+def check_specs():
+    for msapath in ap.params["msapaths"]:
+        if msapath not in ap.params["msaname"]:
+            ap.params["msaname"][ msapath ] = msapath
+
+    for msaname in ap.params["msaname"]:
+        if msaname not in ap.params["msapaths"]:
+            print "\n. Warning, you defined an 'msaname' for", msaname, ", but you never specified a path to that sequence alignment.\n"
+            print "\n. I will continue, but there may be errors. . .\n"
 
 def get_msa_len(p):
     #print path
@@ -244,10 +256,10 @@ def align_msas(msapaths, seed):
     ids = ids_msa.keys()
     ids.sort()
     for i in ids:
-        fout.write( "M" + i.__str__() + " : " + ids_msa[i]  + "\n")
+        fout.write( "M" + i.__str__() + " : " + ap.params["msaname"][ ids_msa[i] ]  + "\n")
     fout.write("\n")
     header = ""
-    fout.write("Residues shown in parenthesis express the value of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
+    fout.write("Residues shown in parentheses express the value of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
     for i in ids:
         header += "M" + i.__str__() + "\t"
     fout.write(header + "\n\n")
@@ -451,7 +463,7 @@ def hdist(ppx, ppy, m, method):
     enty = entropy(ppy)
     entx = entropy(ppx)
     e_dir = 1
-    if (entx < enty) and getmlstate(ppy) < CERTAINTY_CUTOFF:
+    if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF:
     #if (entx - enty) <= ENTROPY_CUTOFF:
         e_dir *= -1
 
@@ -484,7 +496,7 @@ def pdist(ppx, ppy, m):
     enty = entropy(ppy)
     entx = entropy(ppx)
     e_dir = 1
-    if (entx < enty) and getmlstate(ppy) < CERTAINTY_CUTOFF:
+    if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF:
     #if (entx - enty) <= ENTROPY_CUTOFF:
         e_dir *= -1
 
@@ -806,13 +818,121 @@ def rank_sites(blended_data, msa_nodes, msa_refsite_mysite, msa_scores, method="
             ranked_sites.append( (refsite, h) )
     return ranked_sites
 
-def correlate_ranks(ma, mb, ma_site_val, mb_site_val, tag):    
+def get_bins(min, max, stride):
+    # Returns the bin
+    bins = []
+    if min < 0:
+        minbin = 0.0
+        while minbin > min:
+            minbin -= stride
+    elif min > 0:
+        minbin = 0.0
+    if max > 0:
+        maxbin = 0.0
+        while maxbin < max:
+            maxbin += stride
+    i = minbin
+    while i < maxbin:
+        bins.append(i)
+        i += stride
+    return bins
+
+def get_bin(value, bins):
+    ret = bins[0]
+    for i in bins:
+        if i <= value:
+            ret = i
+    return ret
+
+def plot_histogram(metric_data, tag):
+    maxx = None
+    minx = None
+    for metric in metric_data:
+        data = metric_data[metric]
+        for site in data:
+            value = data[site]
+            if maxx == None:
+                maxx = value
+            if minx == None:
+                minx = value
+            if maxx < value:
+                maxx = value
+            if minx > value:
+                minx = value
+    binwidth = 0.1
+    if maxx - minx > 1000:
+        binwidth = 100
+    elif maxx - minx > 500:
+        binwidth = 25
+    elif maxx - minx > 100:
+        binwidth = 10
+    elif maxx - minx > 50:
+        binwidth = 5
+    elif maxx - minx > 10:
+        binwidth = 0.5
+    elif maxx - minx > 5:
+        binwidth = 0.1
+    elif maxx - minx > 1:
+        binwidth = 0.01
+    elif maxx - minx > 0.1:
+        binwidth = 0.005
+    
+    bins = get_bins(minx, maxx, binwidth)
+    metric_bin_count = {}
+    
+    for metric in metric_data:
+        metric_bin_count[metric] = {}
+        for b in bins:
+            metric_bin_count[metric][b] = 0.0
+        
+        data = metric_data[metric]
+        n = data.__len__()
+        for site in data:
+            this_bin = get_bin( data[site], bins )
+            print data[site], this_bin, bins
+            metric_bin_count[metric][this_bin] += 1.0/n
+        
+    
+    """
+    Write the R script.
+    """        
+    pdfpath = tag + ".pdf"
+    
+    cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
+    #cranstr += "bars <- read.table(\"" + tablepath + "\", header=T, sep=\"\\t\")\n"
+    
+    for metric in metric_data:
+        cranstr += metric + " <- c("
+        for bin in bins:
+            if metric_bin_count[metric][bin] == 0.0:
+                metric_bin_count[metric][bin] = 0.5 / metric_data[metric].__len__() 
+            cranstr += metric_bin_count[metric][bin].__str__() + ","
+        cranstr = re.sub(",$", "", cranstr)
+        cranstr += ")\n"
+    
+        cranstr += "bins <- c("
+        for bin in bins:
+            cranstr += bin.__str__() + ","
+        cranstr = re.sub(",$", "", cranstr)
+        cranstr += ");\n"
+    
+        cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, log='y', col=c(\"blue\"), names.arg=bins);\n"
+    
+    cranpath = tag + ".cran"
+    fout = open(cranpath, "w")
+    fout.write( cranstr )
+    fout.close()
+    
+    os.system("r --no-save < " + cranpath)       
+        
+
+def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):    
     if  ma.__len__() != mb.__len__():
         print "\n. Hmm, something is wrong.  Anccomp_tools.py point 742."
         exit()
     ma_ranked = [] # A values in rank order
     mb_ranked = [] # V values in rank order
-    rank_a_b = [] # array of tuples (A val, corresponding B val)
+    rank_a_b = [] # array of triples (A val, B val, mark)
     count_skipped = 0
     for i in range(0, ma.__len__()):
         maval = ma[i][1]
@@ -830,7 +950,10 @@ def correlate_ranks(ma, mb, ma_site_val, mb_site_val, tag):
         if prank < 0:
             print prank
             exit()
-        rank_a_b.append( (hrank, prank) )
+        mark = 1
+        if maval == 0.0 and mbval == 0.0:
+            mark = 0
+        rank_a_b.append( (hrank, prank, mark) )
     spearmans =  ss.spearmanr(ma_ranked, mb_ranked)[0]
     path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue" )
     os.system("r --no-save < " + path)
@@ -847,7 +970,10 @@ def correlate_ranks(ma, mb, ma_site_val, mb_site_val, tag):
     for site in ma_site_val.keys():
         maval = ma_site_val[site]
         mbval = mb_site_val[site]
-        value_a_b.append( [ maval,mbval ] )
+        mark = 1
+        if maval == 0.0 and mbval == 0.0:
+            mark = 0
+        value_a_b.append( [ maval,mbval,mark ] )
         mavals.append(maval)
         mbvals.append(mbval)
     pearsons = ss.pearsonr(mavals, mbvals)
@@ -871,12 +997,20 @@ def plot_correlation(data, outpath, title, color):
     maxx = 0
     x = "x <- c("
     y = "y <- c("
+    marks = "m <- c("
+    colors = "colors <- c("
         
     for tuple in data:
         #print s
         x += tuple[0].__str__() + ","
         y += tuple[1].__str__() + ","
-
+        if tuple[2] == 0:
+            marks += "1,"
+            colors += "'grey',"
+        elif tuple[2] == 1:
+            marks += "20,"
+            colors += "'" + color + "',"
+        
         if float(tuple[0]) > maxx:
             maxx = float(tuple[0])
         if float(tuple[0]) < minx:
@@ -893,10 +1027,16 @@ def plot_correlation(data, outpath, title, color):
     y = re.sub(",$", "", y)
     y += ")"
     cranout.write( y + "\n")
+    marks = re.sub(",$", "", marks)
+    marks += ")"
+    cranout.write( marks + "\n")
+    colors = re.sub(",$", "", colors)
+    colors += ")"
+    cranout.write( colors + "\n")
         
     cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='hvals', ylab='', main='" + title + "', lwd=2, col='" + color + "');\n")
-    cranout.write("points(x, y, lwd=2, type='p', col='" + color + "');\n")
+    cranout.write("points(x, y, lwd=2, type='p', col=colors, pch=m);\n")
     cranout.write("dev.off();\n")
     cranout.close()
     return cranpath    
