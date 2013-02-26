@@ -64,7 +64,7 @@ class ArgParser:
             exit(1)    
 
     def getOptionalList(self, flag, type=str):
-        print self.args, flag
+        #print self.args, flag
         if self.args.__contains__(flag):
             i = self.args.index(flag)
             returnList = []

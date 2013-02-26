@@ -2,5 +2,6 @@ AA_ALPHABET = ["A",  "R",    "N"  , "D" ,  "C"   , "Q"   , "E"  ,  "G"    ,"H"  
 D_SCALAR = 1000
 
 COLORS = ["blue", "red", "green", "purple", "orange"]
-TINY = 0.001
+TINYPP = 0.001
+TINY = 0.000000001
 CERTAINTY_CUTOFF = 0.8 

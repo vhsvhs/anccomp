@@ -5,6 +5,39 @@ import scipy.stats as ss
 from argparser import *
 ap = ArgParser(sys.argv)
 
+# set is an array of floats
+def mean(set):
+    if set.__len__() == 0:
+        return None
+    sum = 0.0
+    for x in set:
+        sum += x
+    return sum / float( set.__len__() )
+
+# standard deviation
+def sd(set):
+    avg = mean(set)
+    if avg == None:
+        return None
+    sumofsquares = 0.0
+    for x in set:
+        sumofsquares += (x - avg)**2
+    return math.sqrt( float( sumofsquares ) / float( set.__len__() ) )
+
+# calculates variance
+def var(set):
+    avg = mean(set)
+    if avg == None:
+        return None
+    sumofsquares = 0.0
+    for x in set:
+        sumofsquares += (x - avg)**2
+    return math.sqrt( float( sumofsquares ) / float( set.__len__() - 1 ) ) 
+
+def stderr(set):
+    return (sd(set) / math.sqrt( set.__len__() ) )
+
+
 def get_anccomp_dir(ap):
     return ap.getArg("--runid")
 
@@ -32,7 +65,7 @@ def get_seq_from_msa(seq, msapath):
 def fill_missing_states(h):
     for a in AA_ALPHABET:
         if a not in h:
-            h[a] = TINY
+            h[a] = TINYPP
     sum = 0.0
     # normalize to sum of 1.0. . .
     for a in AA_ALPHABET:
@@ -152,7 +185,7 @@ def read_specs(p):
     
     #check_specs()
     
-    return [msa_nodes, seed, msa_weights]
+    #return [msa_nodes, seed, msa_weights]
 
 def check_specs():
     for msapath in ap.params["msapaths"]:
@@ -171,8 +204,7 @@ def get_msa_len(p):
     fin = open(p, "r")
     lines = fin.readlines()
     fin.close()
-    lines[1].strip()
-    return lines[1].split()[1].__len__()
+    return float(lines[0].strip().split()[1])
 
 
 def align_msas(msapaths, seed):
@@ -274,9 +306,35 @@ def align_msas(msapaths, seed):
                 line += "-\t"
         fout.write( line + "\n" )
     fout.close()
-    return [longest_msa, msa_refsite_mysite, msa_mysite_refsite]
+    ap.params["longest_msa"] = longest_msa
+    
+    invariant_sites = []
+    fin = open(longest_msa, "r")
+    lines = fin.readlines()
+    taxa_seq = {}
+    #last_taxa = ""
+    for i in range(1, lines.__len__()):
+        if lines[i].__len__() > 1:
+            tokens = lines[i]
+            taxa = tokens[0]
+            seq = tokens[1]
+            taxa_seq[taxa] = seq
+    fin.close()
+    for site in range(0, taxa_seq[ taxa_seq.keys()[0] ].__len__()):
+        found_diff = False
+        compareto = taxa_seq[ taxa_seq.keys()[0] ][site]
+        for taxa in taxa_seq.keys():
+            if taxa_seq[taxa][site] != compareto:
+                found_diff = True
+        if found_diff == False:
+            invariant_sites.append( site )
+    
+    print "\n. 333:", invariant_sites
+    ap.params["invariant_sites"] = invariant_sites
+    
+    return [msa_refsite_mysite, msa_mysite_refsite]
 
-def compare_dat_files(patha, pathb, m, winsize, method="h"):
+def compare_dat_files(patha, pathb, m, winsize, rsites, method="h"):
     """Compares *.dat files for two ancestors from the same alignment."""
     """Returns windata and consdata"""
     """windata[site] = h score"""
@@ -290,33 +348,148 @@ def compare_dat_files(patha, pathb, m, winsize, method="h"):
     
     results = {} 
     
-    limstart = 0
-    x = ap.getOptionalArg("--limstart")
-    if x != False:
-        limstart = int(x)
+    if linesa.__len__() != linesb.__len__():
+        print "\n. Hmmm, something is wrong.  It appears that your ancestors don't have the same number of sites."
+        print ". I'm quitting."
+        exit()
     
-    curr_site = 1
-    aptr = 0
-    bptr = 0
-    while (aptr < linesa.__len__() and bptr < linesb.__len__()):
-        if curr_site >= limstart:
-            al = linesa[aptr]
-            bl = linesb[bptr]        
-            while not al.startswith( curr_site.__str__() ):
-                aptr += 1
-                al = linesa[aptr]
-            while not bl.startswith( curr_site.__str__() ):
-                bptr += 1
-                bl = linesb[bptr]
-            
+    for li in range(0, linesa.__len__()):    
+        al = linesa[li]
+        bl = linesb[li]        
+        asite = int(al.split()[0])
+        bsite = int(bl.split()[0])
+        if asite != bsite:
+            print "\n. Hmm, I've encountered an error. I think your ancestors have a mismatched number of sites."
+            print ". I'm quitting."
+            exit(1)
+
+        if asite in rsites:
             ancx = line_2_hash(al)
-            ancy = line_2_hash(bl)
-                        
-            results[curr_site] = d(ancx, ancy, m, method=method)
-        curr_site += 1
-        aptr += 1
-        bptr += 1    
+            ancy = line_2_hash(bl)       
+            results[asite] = d(ancx, ancy, m, method=method)  
     return results
+
+def dat2pp(datpath):
+    data = {}
+    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
+    longest_msa = ap.params["longest_msa"]
+    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
+    fin = open(datpath, "r")
+    linesa = fin.readlines()
+    fin.close()
+    
+    for li in range(0, linesa.__len__()):    
+        l = linesa[li]  
+        site = int(l.split()[0])
+        data[site] = line_2_hash(l)
+    return data
+
+
+def compare_dat_files_stats(datone, dattwo, msa_mysite_refsite, msa_refsite_mysite):    
+    anc_data = {}
+    anc_data[datone] = dat2pp(datone)
+    anc_data[dattwo] = dat2pp(dattwo)
+    
+    msaone = ap.params["anc_msasource"][datone]
+    msatwo = ap.params["anc_msasource"][dattwo]
+    
+    # compare dat files:
+    nsites = 0
+    countindel = 0
+    countred = 0 # different states
+    countorange = 0 # diff. states, but pairwise secondary states
+    countgreen = 0 # same state, but adds uncertainty
+    redsites = []
+    orangesites = []
+    greensites = []
+    
+    sites = msa_refsite_mysite[ ap.params["longest_msa"] ].keys()
+    
+    #print "\n"
+    #print msa_mysite_refsite
+    #print sites
+    for site in sites:
+        if site not in msa_refsite_mysite[msaone].keys() and site not in msa_refsite_mysite[msatwo].keys():
+            continue
+        else:
+            nsites += 1
+        
+        indel = False
+        red = False
+        orange = False
+        green = False
+        
+        if site not in msa_refsite_mysite[msaone] or site not in msa_refsite_mysite[msatwo]:
+            indel = True
+            countindel += 1
+            continue
+        
+        siteone = msa_refsite_mysite[msaone][site]
+        sitetwo = msa_refsite_mysite[msatwo][site]
+        a_state = getmlstate( anc_data[datone][siteone] )
+        b_state = getmlstate( anc_data[dattwo][sitetwo] )
+        if b_state == None:
+            indel = True
+        # test for indel mismatch:
+        elif b_state != a_state:
+            if b_state == "-" or a_state == "-":
+                indel = True
+        # test for red:
+        elif b_state != a_state and indel == False:
+            if False == anc_data[dattwo][sitetwo].keys().__contains__(a_state):
+                red = True
+            elif False == anc_data[ datone ][siteone].keys().__contains__(b_state):
+                red = True
+            elif anc_data[datone][siteone][b_state] < 0.05 and anc_data[dattwo][sitetwo][a_state] < 0.05:
+                red = True
+        # test for orange:
+        elif b_state != a_state and red == False and indel == False:
+            orange = True
+        # test for green
+        elif b_state == a_state:
+            #print "372:",  anc, site, b_state
+            if (anc_data[dattwo][sitetwo][b_state] < 0.8 and anc_data[datone][siteone][b_state] > 0.8) or (anc_data[dattwo][sitetwo][b_state] > 0.8 and anc_data[datone][siteone][b_state] < 0.8):
+                green = True
+        if indel:
+            countindel += 1
+        if red:
+            countred += 1
+            redsites.append(site)
+            #print "site", site, " - case 1"
+            #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+        if orange:
+            countorange +=1
+            orangesites.append(site)
+            #print "site", site, " - case 2"
+            #print "\t", getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+        if green:
+            countgreen += 1
+            greensites.append(site)
+            #print "site", site, " - case 3"
+            #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+    
+    return [nsites, countindel, countred, countorange, countgreen]
+    
+#    print "============================================================"
+#    print "Legend:"
+#    print "- case 1: sites with disagreeing ML states, and neither ancestral vector has strong support for the others' state."
+#    print "- case 2: sites with disagreeing ML states, but one or both of the ancestral vectors has PP < 0.05 for the others' ML state."
+#    print "- case 3: sites with the same ML state, but one of the ancestral vectors strongly supports (PP > 0.8) the state, while the other vector poorly supports (PP < 0.8) the state."
+#    print "============================================================"
+#    print "\n"
+#    
+#    print "============================================================"
+#    print "Summary:"
+#    print "nsites=", nsites
+#    print "indel_mismatch=", countindel
+#    print "case 1=", countred, "sites: ",  redsites
+#    print "case 2=", countorange, "sites: ",  orangesites
+#    print "case 3=", countgreen, "sites: ", greensites
+#    print "============================================================"
+#    print "\n\n"
 
 
 def compute_cdata(msapath, winsize):
@@ -473,10 +646,7 @@ def hdist(ppx, ppy, m, method):
     if combostyle == False:
         combostyle = "product"
     if combostyle == "sum":
-        w = float(ap.getOptionalArg("--training_weight"))
-        if w > 1.0:
-            print "\n. Error: the --training_weight must range from 0.0 to 1.0."
-        h = w*klsum + (1-w)*s + e_dir
+        h = klsum + (1-w)*s + e_dir
     elif combostyle == "product":
         h = klsum * s * e_dir
     return h
@@ -650,21 +820,23 @@ def fill_missing_sites(data):
     return new_data
 
 def plot(data, outpath, title, ylab, color):
-    data = fill_missing_sites(data)
+    #data = fill_missing_sites(data)
     
     cranpath = outpath + ".cran"
     cranout = open(cranpath, "w")
-    miny = 0.0
-    maxy = 0.0
-    minx = 0
-    maxx = 0
     x = "x <- c("
     y = "y <- c("
     sites = data.keys()
     sites.sort()
+
+    miny = 0.0
+    maxy = 0.0
+    miny = 0.0
+    maxy = 0.0
+    
     minx = sites[0]
     maxx = sites[ sites.__len__()-1 ]
-    
+        
     for s in sites:
         yval = 0
         if data[s] != None:
@@ -698,14 +870,10 @@ def plot(data, outpath, title, ylab, color):
     cranout.close()
     return cranpath
 
-def blend_msa_data(msa_data,msa_refsite_mysite,longest_msa,msa_weights):
-    limstart = 0
-    x = ap.getOptionalArg("--limstart")
-    if x != False:
-        limstart = int(x)
+def blend_msa_data(msa_data,msa_refsite_mysite):
     bdata = {} # key = reference site from MSA-MSA, value = blended score
-    for ref_site in msa_refsite_mysite[longest_msa].keys():
-        if ref_site < limstart:
+    for ref_site in msa_refsite_mysite[ ap.params["longest_msa"] ].keys():
+        if ref_site not in ap.params["rsites"][ ap.params["longest_msa"] ]:
             continue
         """Does this ref_site exist in all alignments?"""
         skip_this_site = False        
@@ -718,20 +886,21 @@ def blend_msa_data(msa_data,msa_refsite_mysite,longest_msa,msa_weights):
         if skip_this_site == False:
            for alg in msa_data:
                 mysite = msa_refsite_mysite[alg][ref_site]
+                #print alg, mysite, ref_site
                 myscore = 0.0
                 if mysite != None:
                     myscore = msa_data[alg][mysite]
                 if mysite != None:
                     if ref_site in bdata:            
-                        bdata[ref_site] += (msa_weights[alg] * myscore)
+                        bdata[ref_site] += (ap.params["msa_weights"][alg] * myscore)
                     else:
-                        bdata[ref_site] = msa_weights[alg] * myscore
+                        bdata[ref_site] = ap.params["msa_weights"][alg] * myscore
     return bdata
 
-def write_table(hdata, msa_scores,msa_refsite_mysite,longest_msa,method="h"):
+def write_table(hdata, msa_scores,msa_refsite_mysite,method="h"):
     foutpath = get_table_outpath(ap, tag=method + ".summary.txt")
     fout = open(foutpath, "w")
-    sites = msa_refsite_mysite[longest_msa].keys()
+    sites = msa_refsite_mysite[ ap.params["longest_msa"] ].keys()
     sites.sort()
     msapaths = msa_scores.keys()
     msapaths.sort()
@@ -743,17 +912,20 @@ def write_table(hdata, msa_scores,msa_refsite_mysite,longest_msa,method="h"):
             header += method + "(" + ap.params["msaname"][m] + ")\t"
     header += "\n"
     fout.write(header)
+
+    line = ""
     for s in sites:
-        line = s.__str__() + "\t"
-        line += "%.3f"%hdata[s] + "\t"
-        if msapaths.__len__() > 1:
-            for m in msapaths:
-                if s in msa_refsite_mysite[m]:
-                    mys = msa_refsite_mysite[m][s]
-                    line += "%.3f"%msa_scores[m][mys] + "\t"
-                else:
-                    line += "\t"
-        line += "\n"
+        if s in ap.params["rsites"][ ap.params["longest_msa"] ]:
+            line = s.__str__() + "\t"
+            line += "%.3f"%hdata[s] + "\t"
+            if msapaths.__len__() > 1:
+                for m in msapaths:
+                    if s in msa_refsite_mysite[m]:
+                        mys = msa_refsite_mysite[m][s]
+                        line += "%.3f"%msa_scores[m][mys] + "\t"
+                    else:
+                        line += "\t"
+            line += "\n"
         fout.write(line)
     fout.close()
 
@@ -833,11 +1005,17 @@ def get_bins(min, max, stride):
             maxbin += stride
     i = minbin
     while i < maxbin:
+        if i > 0.0 and 0.0 not in bins:
+            bins.append(0.0)
         bins.append(i)
+        if i >= 0.0 and i < 0.0+stride and TINY not in bins:
+            bins.append( TINY )
         i += stride
     return bins
 
 def get_bin(value, bins):
+    if value == 0.0:
+        return 0.0
     ret = bins[0]
     for i in bins:
         if i <= value:
@@ -845,12 +1023,16 @@ def get_bin(value, bins):
     return ret
 
 def plot_histogram(metric_data, tag):
-    maxx = None
-    minx = None
+    cranpaths = []
+    metric_bin_count = {}
     for metric in metric_data:
+        maxx = None
+        minx = None
+        allvalues = []
         data = metric_data[metric]
         for site in data:
             value = data[site]
+            allvalues.append(value)
             if maxx == None:
                 maxx = value
             if minx == None:
@@ -859,28 +1041,34 @@ def plot_histogram(metric_data, tag):
                 maxx = value
             if minx > value:
                 minx = value
-    binwidth = 0.1
-    if maxx - minx > 1000:
-        binwidth = 100
-    elif maxx - minx > 500:
-        binwidth = 25
-    elif maxx - minx > 100:
-        binwidth = 10
-    elif maxx - minx > 50:
-        binwidth = 5
-    elif maxx - minx > 10:
-        binwidth = 0.5
-    elif maxx - minx > 5:
         binwidth = 0.1
-    elif maxx - minx > 1:
-        binwidth = 0.01
-    elif maxx - minx > 0.1:
-        binwidth = 0.005
+        if maxx - minx > 1000:
+            binwidth = 50
+        elif maxx - minx > 500:
+            binwidth = 25
+        elif maxx - minx > 100:
+            binwidth = 10
+        elif maxx - minx > 50:
+            binwidth = 5
+        elif maxx - minx > 10:
+            binwidth = 0.5
+        elif maxx - minx > 5:
+            binwidth = 0.1
+        elif maxx - minx > 1:
+            binwidth = 0.01
+        elif maxx - minx > 0.5:
+            binwidth = 0.01
+        elif maxx - minx > 0.1:
+            binwidth = 0.005
+        elif maxx - minx > 0.05:
+            binwidth = 0.001
+        elif maxx - minx > 0.01:
+            binwidth = 0.0005
     
-    bins = get_bins(minx, maxx, binwidth)
-    metric_bin_count = {}
-    
-    for metric in metric_data:
+        bins = get_bins(minx, maxx, binwidth)
+        #print "884:", metric
+        #print "885:", bins
+        #print "886:", maxx, minx, maxx-minx
         metric_bin_count[metric] = {}
         for b in bins:
             metric_bin_count[metric][b] = 0.0
@@ -889,19 +1077,18 @@ def plot_histogram(metric_data, tag):
         n = data.__len__()
         for site in data:
             this_bin = get_bin( data[site], bins )
-            print data[site], this_bin, bins
+            #print "901:", data[site], this_bin
             metric_bin_count[metric][this_bin] += 1.0/n
         
+        """
+        Write the R script.
+        """        
+        pdfpath = tag + "." + metric + ".pdf"
+        
+        cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
+        #cranstr += "bars <- read.table(\"" + tablepath + "\", header=T, sep=\"\\t\")\n"
     
-    """
-    Write the R script.
-    """        
-    pdfpath = tag + ".pdf"
-    
-    cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
-    #cranstr += "bars <- read.table(\"" + tablepath + "\", header=T, sep=\"\\t\")\n"
-    
-    for metric in metric_data:
+        #for metric in metric_data:
         cranstr += metric + " <- c("
         for bin in bins:
             if metric_bin_count[metric][bin] == 0.0:
@@ -918,15 +1105,25 @@ def plot_histogram(metric_data, tag):
     
         cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, log='y', col=c(\"blue\"), names.arg=bins);\n"
     
-    cranpath = tag + ".cran"
-    fout = open(cranpath, "w")
-    fout.write( cranstr )
-    fout.close()
+#        avg = mean(allvalues)
+#        stdev = sd(allvalues)
+#        cranstr += "abline(v=" + avg.__str__() + ", lty=2,lwd=2)\n"
+#        cranstr += "abline(v=" + (avg-stdev).__str__() + ", lty=3,lwd=1)\n"
+#        cranstr += "abline(v=" + (avg+stdev).__str__() + ", lty=3,lwd=1)\n"
+#        cranstr += "abline(v=" + (avg-(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
+#        cranstr += "abline(v=" + (avg+(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
     
-    os.system("r --no-save < " + cranpath)       
-        
+        cranpath = tag + "." + metric + ".cran"
+        fout = open(cranpath, "w")
+        fout.write( cranstr )
+        fout.close()
+        cranpaths.append(cranpath)
+        #os.system("r --no-save < " + cranpath)       
+    return cranpaths
 
 def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):    
+    cranpaths = []
+    
     if  ma.__len__() != mb.__len__():
         print "\n. Hmm, something is wrong.  Anccomp_tools.py point 742."
         exit()
@@ -956,7 +1153,8 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
         rank_a_b.append( (hrank, prank, mark) )
     spearmans =  ss.spearmanr(ma_ranked, mb_ranked)[0]
     path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue" )
-    os.system("r --no-save < " + path)
+    #os.system("r --no-save < " + path)
+    cranpaths.append( path )
 
     fout = open( get_plot_outpath(ap, tag="corr-rank." + tag) + ".txt" , "w")
     fout.write( spearmans.__str__() + "\n")
@@ -978,7 +1176,8 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
         mbvals.append(mbval)
     pearsons = ss.pearsonr(mavals, mbvals)
     path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "green" )
-    os.system("r --no-save < " + path)
+    #os.system("r --no-save < " + path)
+    cranpaths.append( path )
     
     fout = open( get_plot_outpath(ap, tag="corr-value." + tag) + ".txt" , "w")
     fout.write( pearsons.__str__() + "\n")
@@ -986,7 +1185,8 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
         fout.write( v[0].__str__() + "\t" + v[1].__str__() + "\n")
     fout.close()
     
-    return [spearmans, pearsons]
+    return cranpaths
+    #return [spearmans, pearsons]
     
 def plot_correlation(data, outpath, title, color):
     cranpath = outpath + ".cran"
@@ -1040,3 +1240,5 @@ def plot_correlation(data, outpath, title, color):
     cranout.write("dev.off();\n")
     cranout.close()
     return cranpath    
+
+
