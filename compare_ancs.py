@@ -49,8 +49,7 @@ winsizes = ap.getList("--window_sizes", type=int)
 adir = get_anccomp_dir(ap)
 if not os.path.exists(adir):
     os.system("mkdir " + adir)
-#[msa_nodes, seed, msa_weights] = 
-read_specs( specpath ) #msa_nodes[msapath] = [anc. node 1 path, anc. node 2 path]
+read_specs( specpath ) #msa_comparisons[msapath] = [anc. node 1 path, anc. node 2 path]
 m = get_matrix(modelpath) # m is the Markovian substitution matrix.
 
 metrics = ap.getOptionalList("--metrics")
@@ -61,17 +60,20 @@ if metrics == None:
 
 """ 
 Part 2:
-Align the alignments.
+Align the alignments, using the method align_msas().
+The mapping of sites from the reference MSA to other MSAs will be written to two hashtables:
+    ap.params["msa_refsite2mysite"]
+    and ap.params["msa_mysite2refsite"]
+The reference alignment (i.e. the longest alignment) will be saved as the string ap.params["longest_msa"].
+Invariant sites will be listed in ap.params["invariant_sites"]
 """
-[msa_refsite_mysite, msa_mysite_refsite] = align_msas(ap.params["msa_nodes"].keys(), ap.params["seed"])
+align_msas()
 
 """
 NOTE:
-* longest_msa = the path to the longest of the alignments.  We'll use the numbering in the longest MSA
-as the reference numbering when we integrate results from multiple alignments.
-* msa_refsite_mysite = hashtable. key = msa path, value = hashtable, where key = site number in the longest MSA,
+* ap.params["msa_refsite2mysite"] = hashtable. key = msa path, value = hashtable, where key = site number in the longest MSA,
 and value = site number in the msa path
-* msa_mysite_refsite = hashtable. key = msa path, value = hashtable, where key = site number in msa path, value
+* ap.params["msa_mysite2refsite"] = hashtable. key = msa path, value = hashtable, where key = site number in msa path, value
 = site number in the longest MSA.
 """
 
@@ -82,14 +84,13 @@ At the end of this section, ap.params["rsites"][msapath] will contain the approp
 sites on which to restrict this analysis for the MSA at msapath.
 
 """
-
 print "\n. I'm building a restriction site library. . ."
 
 limstart = 1
-limstop = msa_refsite_mysite[ ap.params["longest_msa"] ].keys().__len__() + 1
+limstop = ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys().__len__() + 1
 
 ap.params["rsites"] = {}
-for msapath in ap.params["msa_nodes"]:
+for msapath in ap.params["msanames"]:
     ap.params["rsites"][msapath] = []
 
 
@@ -106,7 +107,7 @@ x = ap.getOptionalArg("--limstop")
 if x != False:
     limstop = int(x)
 for site in range(limstart, limstop):
-    if site in msa_refsite_mysite[ap.params["longest_msa"]]:
+    if site in ap.params["msa_refsite2mysite"][ap.params["longest_msa"]]:
         #print "adding site:", site
         ap.params["rsites"][ap.params["longest_msa"]].append(site) 
 
@@ -121,54 +122,61 @@ else:
     for i in range(limstart, limstop+1):
         ap.params["rsites"][ap.params["longest_msa"]].append(i)
 
-
+# Map the restriction sites onto each MSA:
 for site in ap.params["rsites"][ap.params["longest_msa"]]:
-    #print site
-    for msapath in ap.params["msa_nodes"]:
+    for msapath in ap.params["msanames"]:
         if msapath != ap.params["longest_msa"]:
-            if site in msa_refsite_mysite[msapath]:
-                ap.params["rsites"][msapath].append( msa_refsite_mysite[msapath][site] )
+            if site in ap.params["msa_refsite2mysite"][msapath]:
+                ap.params["rsites"][msapath].append( ap.params["msa_refsite2mysite"][msapath][site] )
 
+# Cull the invariant sites from our analysis:
 for site in ap.params["invariant_sites"]:
-    if site not in ap.params["rsites"][ap.params["longest_msa"]]:
-        ap.params["rsites"][ ap.params["longest_msa"] ].append(site)
-        for msapath in ap.params["msa_nodes"]:
-            if site in msa_refsite_mysite[msapath]:
-                ap.params["rsites"][msapath].append( msa_refsite_mysite[msapath][site] )    
+    if site in ap.params["rsites"][ap.params["longest_msa"]]:
+        ap.params["rsites"][ ap.params["longest_msa"] ].pop(site)
+        for msapath in ap.params["msanames"]:
+            if site in ap.params["msa_refsite2mysite"][msapath]:
+                ap.params["rsites"][msapath].pop( ap.params["msa_refsite2mysite"][msapath][site] )    
+
+#print "\n. I'm excluding the following invariant sites:", 
+#print ap.params["invariant_sites"]
+
+#print "\n. The analysis will focus on the following sites only:"
+#print ap.params["rsites"]
+
 """
 Part 2c:
 Calculate statistics comparing the ancestral DAT files.
 """
-print "\n. I'm calculating distances between your ancestral .dat files. . ."
-
-old_ancs = []
-new_ancs = []
-ap.params["anc_msasource"] = {}
-for msapath in ap.params["msa_nodes"]:
-    this_ancpath = ap.params["msa_nodes"][msapath][0]
-    that_ancpath = ap.params["msa_nodes"][msapath][1]
-    old_ancs.append(this_ancpath)
-    new_ancs.append(that_ancpath)
-    ap.params["anc_msasource"][ this_ancpath ] = msapath
-    ap.params["anc_msasource"][ that_ancpath ] = msapath
-
-fout = open(adir + "/dat_comparison.txt", "w")
-for o in old_ancs:
-    for p in old_ancs:
-        if o != p:
-            #anc_data = {}
-            #anc_data[o] = anc_ppvals[o]
-            #anc_data[p] = anc_ppvals[p]
-            x = compare_dat_files_stats(o,p,msa_mysite_refsite, msa_refsite_mysite)
-            print o, p, x
-            fout.write(o + "\t")
-            fout.write(p + "\t")
-            fout.write( "%.4f"%(float(x[1])/x[0]) + "\t")
-            fout.write( "%.4f"%(float(x[2])/x[0]) + "\t")
-            fout.write( "%.4f"%(float(x[3])/x[0]) + "\t")
-            fout.write( "%.4f"%(float(x[4])/x[0]) + "\t")
-            fout.write( x[0].__str__() + "\n")        
-fout.close()
+#print "\n. I'm calculating distances between your ancestral .dat files. . ."
+#
+#old_ancs = []
+#new_ancs = []
+#ap.params["anc_msasource"] = {}
+#for msapath in ap.params["msanames"]:
+#    this_ancpath = ap.params["msanames"][msapath][0]
+#    that_ancpath = ap.params["msanames"][msapath][1]
+#    #old_ancs.append(this_ancpath)
+#    #new_ancs.append(that_ancpath)
+#    ap.params["anc_msasource"][ this_ancpath ] = msapath
+#    ap.params["anc_msasource"][ that_ancpath ] = msapath
+#
+#fout = open(adir + "/dat_comparison.txt", "w")
+#for o in old_ancs:
+#    for p in old_ancs:
+#        if o != p:
+#            #anc_data = {}
+#            #anc_data[o] = anc_ppvals[o]
+#            #anc_data[p] = anc_ppvals[p]
+#            x = compare_dat_files_stats(o,p,ap.params["msa_mysite2refsite"], ap.params["msa_refsite2mysite"])
+#            print o, p, x
+#            fout.write(o + "\t")
+#            fout.write(p + "\t")
+#            fout.write( "%.4f"%(float(x[1])/x[0]) + "\t")
+#            fout.write( "%.4f"%(float(x[2])/x[0]) + "\t")
+#            fout.write( "%.4f"%(float(x[3])/x[0]) + "\t")
+#            fout.write( "%.4f"%(float(x[4])/x[0]) + "\t")
+#            fout.write( x[0].__str__() + "\n")        
+#fout.close()
 
 """
 Part 3:
@@ -185,12 +193,12 @@ if "hp" in metrics:
 if "p" in metrics:
     metric_data["p"] = {}
 
-for msapath in ap.params["msa_nodes"]:
-    this_ancpath = ap.params["msa_nodes"][msapath][0]
-    that_ancpath = ap.params["msa_nodes"][msapath][1]
+for msapath in ap.params["msanames"]:
+    this_ancpath = ap.params["msa_comparisons"][msapath][0]
+    that_ancpath = ap.params["msa_comparisons"][msapath][1]
     print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "] with a smoothing window =", w
     for metric in metrics:
-        metric_data[metric][msapath] = compare_dat_files(this_ancpath, that_ancpath, m, w, ap.params["rsites"][msapath], method=metric)    
+        metric_data[metric][msapath] = compare_dat_files(this_ancpath, that_ancpath, m, w, method=metric)    
 
 """
 Part 4:
@@ -200,8 +208,8 @@ Integrate the results over multiple alignments.
 #exit()
 metric_blendeddata = {} # key = metric ID, value = hashtable of blended (i.e. integrated) data
 for metric in metrics:
-    print "\n. I'm blending the data for", metric
-    metric_blendeddata[metric] = blend_msa_data(metric_data[metric],msa_refsite_mysite)
+    print "\n. I'm integrating the data for", metric, "from across all the alignments."
+    metric_blendeddata[metric] = blend_msa_data(metric_data[metric])
 
 """
 Part 5:
@@ -211,15 +219,15 @@ cranpaths = []  # this array will hold paths to R scripts that we'll execute (in
 
 metric_ranked = {}
 for metric in metrics:
-    write_table(metric_blendeddata[metric], metric_data[metric], msa_refsite_mysite, method=metric)
-    metric_ranked[metric] = rank_sites(metric_blendeddata[metric], ap.params["msa_nodes"], msa_refsite_mysite, metric_data[metric], method=metric)
+    write_table(metric_blendeddata[metric], metric_data[metric], method=metric)
+    metric_ranked[metric] = rank_sites(metric_blendeddata[metric], metric_data[metric], method=metric)
 
 if metrics.__len__() > 1:
-    comparisons = []
+    metric_comparisons = []
     for i in range(0, metrics.__len__()):
         for j in range(i, metrics.__len__()):
-            comparisons.append( (metrics[i], metrics[j]) )
-    for comparison in comparisons:
+            metric_comparisons.append( (metrics[i], metrics[j]) )
+    for comparison in metric_comparisons:
         this_metric = comparison[0]
         that_metric = comparison[1]
         for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):

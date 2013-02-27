@@ -74,7 +74,7 @@ def fill_missing_states(h):
         h[a] = h[a] / sum        
     return h
 
-def line_2_hash(line):
+def datline_2_pphash(line):
     tokens = line.split()[1:]
     h = {}
     i = 0
@@ -153,10 +153,10 @@ def fill_matrix_rev_values(m):
     return m    
 
 def read_specs(p):
-    msa_nodes = {} # key = msapath, value = array of *.dat tuples
-    msa_weights = {}
+    ap.params["msa_comparisons"] = {} # key = msapath, value = array of *.dat tuples
+    ap.params["msa_weights"] = {}
     seed = ""
-    ap.params["msaname"] = {}
+    ap.params["msanames"] = {}
     fin = open(p, "r")
     for l in fin.readlines():
         if l.startswith("#"): # skip lines with comments
@@ -164,38 +164,36 @@ def read_specs(p):
         if l.startswith("msapaths"):
             tokens = l.split()
             for t in tokens[1:]:
-                ap.params["msaname"][t] = t
-                msa_nodes[t] = None
+                ap.params["msanames"][t] = t
+                ap.params["msa_comparisons"][t] = None
         elif l.startswith("seed"):
             tokens = l.split()
-            seed = tokens[1]
+            ap.params["seed"] = tokens[1]
         elif l.startswith("compare"):
             tokens = l.split()
-            msa_nodes[tokens[3]] = (tokens[1],tokens[2])
+            ap.params["msa_comparisons"][tokens[3]] = (tokens[1],tokens[2])
         elif l.startswith("msaweight"):
             tokens = l.split()
-            msa_weights[ tokens[1] ] = float(tokens[2])
+            ap.params["msa_weights"][ tokens[1] ] = float(tokens[2])
         elif l.startswith("msaname"):
             tokens = l.split()
-            ap.params["msaname"][ tokens[1] ] = tokens[2]
-    fin.close()
-    ap.params["msa_nodes"] = msa_nodes
-    ap.params["seed"] = seed
-    ap.params["msa_weights"] = msa_weights
+            ap.params["msanames"][ tokens[1] ] = tokens[2]
+    fin.close()    
     
-    #check_specs()
+    check_specs()
     
-    #return [msa_nodes, seed, msa_weights]
-
 def check_specs():
-    for msapath in ap.params["msapaths"]:
-        if msapath not in ap.params["msaname"]:
-            ap.params["msaname"][ msapath ] = msapath
+    for msapath in ap.params["msa_comparisons"]:
+        if msapath not in ap.params["msanames"]:
+            ap.params["msanames"][ msapath ] = msapath
 
-    for msaname in ap.params["msaname"]:
-        if msaname not in ap.params["msapaths"]:
-            print "\n. Warning, you defined an 'msaname' for", msaname, ", but you never specified a path to that sequence alignment.\n"
-            print "\n. I will continue, but there may be errors. . .\n"
+    ap.params["anc_msasource"] = {}
+    for msapath in ap.params["msanames"]:
+        this_ancpath = ap.params["msa_comparisons"][msapath][0]
+        that_ancpath = ap.params["msa_comparisons"][msapath][1]
+        ap.params["anc_msasource"][ this_ancpath ] = msapath
+        ap.params["anc_msasource"][ that_ancpath ] = msapath
+
 
 def get_msa_len(p):
     #print path
@@ -207,8 +205,11 @@ def get_msa_len(p):
     return float(lines[0].strip().split()[1])
 
 
-def align_msas(msapaths, seed):
+def align_msas():
     # Find the longest MSA. . .
+    msapaths = ap.params["msanames"].keys()
+    seed = ap.params["seed"]
+    
     longest_len = 0
     longest_msa = None
     for p in msapaths:
@@ -243,12 +244,12 @@ def align_msas(msapaths, seed):
             print ""
 
     # Align the focus sequences. . .
-    msa_refsite_mysite = {} # key = alg, value = hash, where key = site in longest alg, value = my site (or None)
-    msa_mysite_refsite = {} # the reverse lookup of msa_refsite_mysite
+    ap.params["msa_refsite2mysite"] = {} # key = alg, value = hash, where key = site in longest alg, value = my site (or None)
+    ap.params["msa_mysite2refsite"] = {} # the reverse lookup of ap.params["msa_refsite2mysite"]
     for alg in msapaths:
         print "\n. Aligning [", alg, "] to [", longest_msa, "]"
-        msa_refsite_mysite[alg] = {}
-        msa_mysite_refsite[alg] = {}
+        ap.params["msa_refsite2mysite"][alg] = {}
+        ap.params["msa_mysite2refsite"][alg] = {}
         ref_site = 1
         my_site = 1
         while my_site-1 < msa_seedseq[alg].__len__() and ref_site-1 < msa_seedseq[longest_msa].__len__():
@@ -261,8 +262,8 @@ def align_msas(msapaths, seed):
                     print "anccomp 169: matching", my_site, "in", alg, "to", ref_site, "states:", my_state, ref_state    
                     print "\n"
                     exit(1)
-                msa_refsite_mysite[alg][ref_site] = my_site
-                msa_mysite_refsite[alg][my_site] = ref_site
+                ap.params["msa_refsite2mysite"][alg][ref_site] = my_site
+                ap.params["msa_mysite2refsite"][alg][my_site] = ref_site
                 ref_site += 1
                 my_site += 1
                 #continue
@@ -287,23 +288,25 @@ def align_msas(msapaths, seed):
     fout = open(get_anccomp_dir(ap) + "/meta_alignment.txt", "w")
     ids = ids_msa.keys()
     ids.sort()
+    fout.write("Alignment Key:\n")
     for i in ids:
-        fout.write( "M" + i.__str__() + " : " + ap.params["msaname"][ ids_msa[i] ]  + "\n")
+        fout.write( "M" + i.__str__() + " : " + ap.params["msanames"][ ids_msa[i] ]  + "\n")
     fout.write("\n")
     header = ""
-    fout.write("Residues shown in parentheses express the value of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
+    fout.write("Residues shown in parentheses express the state of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
+    fout.write("The mark 'x' indicates that no corresponding site was found in the alignment.\n")
     for i in ids:
         header += "M" + i.__str__() + "\t"
     fout.write(header + "\n\n")
     for site in range(0, msa_seedseq[longest_msa].__len__()):
         line = ""
         for i in ids:
-            if (site+1) in msa_refsite_mysite[ ids_msa[i] ]:
-                mysite = msa_refsite_mysite[ ids_msa[i] ][ site+1 ]
+            if (site+1) in ap.params["msa_refsite2mysite"][ ids_msa[i] ]:
+                mysite = ap.params["msa_refsite2mysite"][ ids_msa[i] ][ site+1 ]
                 state = msa_seedseq[ids_msa[i]][mysite-1]
                 line += mysite.__str__() + " (" + state + ")\t"
             else:
-                line += "-\t"
+                line += "x\t"
         fout.write( line + "\n" )
     fout.close()
     ap.params["longest_msa"] = longest_msa
@@ -329,16 +332,18 @@ def align_msas(msapaths, seed):
         if found_diff == False:
             invariant_sites.append( site )
     
-    print "\n. 333:", invariant_sites
     ap.params["invariant_sites"] = invariant_sites
-    
-    return [msa_refsite_mysite, msa_mysite_refsite]
+    ap.params["msa_refsite2mysite"] = ap.params["msa_refsite2mysite"]
+    ap.params["msa_mysite2refsite"] = ap.params["msa_mysite2refsite"]
 
-def compare_dat_files(patha, pathb, m, winsize, rsites, method="h"):
+def compare_dat_files(patha, pathb, m, winsize, method="h"):
     """Compares *.dat files for two ancestors from the same alignment."""
     """Returns windata and consdata"""
     """windata[site] = h score"""
     """consdata[site] = r score"""
+
+    msaone = ap.params["anc_msasource"][patha]
+    
     fin = open(patha, "r")
     linesa = fin.readlines()
     fin.close()
@@ -347,12 +352,7 @@ def compare_dat_files(patha, pathb, m, winsize, rsites, method="h"):
     fin.close()
     
     results = {} 
-    
-    if linesa.__len__() != linesb.__len__():
-        print "\n. Hmmm, something is wrong.  It appears that your ancestors don't have the same number of sites."
-        print ". I'm quitting."
-        exit()
-    
+        
     for li in range(0, linesa.__len__()):    
         al = linesa[li]
         bl = linesb[li]        
@@ -363,17 +363,14 @@ def compare_dat_files(patha, pathb, m, winsize, rsites, method="h"):
             print ". I'm quitting."
             exit(1)
 
-        if asite in rsites:
-            ancx = line_2_hash(al)
-            ancy = line_2_hash(bl)       
+        if asite in ap.params["rsites"][msaone]:
+            ancx = datline_2_pphash(al)
+            ancy = datline_2_pphash(bl)       
             results[asite] = d(ancx, ancy, m, method=method)  
     return results
 
 def dat2pp(datpath):
     data = {}
-    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
-    longest_msa = ap.params["longest_msa"]
-    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
     fin = open(datpath, "r")
     linesa = fin.readlines()
     fin.close()
@@ -381,11 +378,11 @@ def dat2pp(datpath):
     for li in range(0, linesa.__len__()):    
         l = linesa[li]  
         site = int(l.split()[0])
-        data[site] = line_2_hash(l)
+        data[site] = datline_2_pphash(l)
     return data
 
 
-def compare_dat_files_stats(datone, dattwo, msa_mysite_refsite, msa_refsite_mysite):    
+def compare_dat_files_stats(datone, dattwo):    
     anc_data = {}
     anc_data[datone] = dat2pp(datone)
     anc_data[dattwo] = dat2pp(dattwo)
@@ -403,13 +400,18 @@ def compare_dat_files_stats(datone, dattwo, msa_mysite_refsite, msa_refsite_mysi
     orangesites = []
     greensites = []
     
-    sites = msa_refsite_mysite[ ap.params["longest_msa"] ].keys()
+    sites = ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys()
     
     #print "\n"
-    #print msa_mysite_refsite
+    #print ap.params["msa_mysite2refsite"]
     #print sites
     for site in sites:
-        if site not in msa_refsite_mysite[msaone].keys() and site not in msa_refsite_mysite[msatwo].keys():
+        #
+        # to-do: filter for rsites
+        #    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
+        #    longest_msa = ap.params["longest_msa"]
+        
+        if site not in ap.params["msa_refsite2mysite"][msaone].keys() and site not in ap.params["msa_refsite2mysite"][msatwo].keys():
             continue
         else:
             nsites += 1
@@ -419,13 +421,13 @@ def compare_dat_files_stats(datone, dattwo, msa_mysite_refsite, msa_refsite_mysi
         orange = False
         green = False
         
-        if site not in msa_refsite_mysite[msaone] or site not in msa_refsite_mysite[msatwo]:
+        if site not in ap.params["msa_refsite2mysite"][msaone] or site not in ap.params["msa_refsite2mysite"][msatwo]:
             indel = True
             countindel += 1
             continue
         
-        siteone = msa_refsite_mysite[msaone][site]
-        sitetwo = msa_refsite_mysite[msatwo][site]
+        siteone = ap.params["msa_refsite2mysite"][msaone][site]
+        sitetwo = ap.params["msa_refsite2mysite"][msatwo][site]
         a_state = getmlstate( anc_data[datone][siteone] )
         b_state = getmlstate( anc_data[dattwo][sitetwo] )
         if b_state == None:
@@ -870,22 +872,22 @@ def plot(data, outpath, title, ylab, color):
     cranout.close()
     return cranpath
 
-def blend_msa_data(msa_data,msa_refsite_mysite):
+def blend_msa_data(msa_data):
     bdata = {} # key = reference site from MSA-MSA, value = blended score
-    for ref_site in msa_refsite_mysite[ ap.params["longest_msa"] ].keys():
+    for ref_site in ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys():
         if ref_site not in ap.params["rsites"][ ap.params["longest_msa"] ]:
             continue
         """Does this ref_site exist in all alignments?"""
         skip_this_site = False        
         for msa in msa_data:
             #print "651: msa = ", msa
-            if False == msa_refsite_mysite[msa].keys().__contains__( ref_site ):
+            if False == ap.params["msa_refsite2mysite"][msa].keys().__contains__( ref_site ):
                 bdata[ref_site] = 0.0
                 skip_this_site = True
 
         if skip_this_site == False:
            for alg in msa_data:
-                mysite = msa_refsite_mysite[alg][ref_site]
+                mysite = ap.params["msa_refsite2mysite"][alg][ref_site]
                 #print alg, mysite, ref_site
                 myscore = 0.0
                 if mysite != None:
@@ -897,10 +899,10 @@ def blend_msa_data(msa_data,msa_refsite_mysite):
                         bdata[ref_site] = ap.params["msa_weights"][alg] * myscore
     return bdata
 
-def write_table(hdata, msa_scores,msa_refsite_mysite,method="h"):
+def write_table(hdata, msa_scores, method="h"):
     foutpath = get_table_outpath(ap, tag=method + ".summary.txt")
     fout = open(foutpath, "w")
-    sites = msa_refsite_mysite[ ap.params["longest_msa"] ].keys()
+    sites = ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys()
     sites.sort()
     msapaths = msa_scores.keys()
     msapaths.sort()
@@ -909,7 +911,7 @@ def write_table(hdata, msa_scores,msa_refsite_mysite,method="h"):
     header += method + "\t"
     if msapaths.__len__() > 1:
         for m in msapaths:    
-            header += method + "(" + ap.params["msaname"][m] + ")\t"
+            header += method + "(" + ap.params["msanames"][m] + ")\t"
     header += "\n"
     fout.write(header)
 
@@ -920,8 +922,8 @@ def write_table(hdata, msa_scores,msa_refsite_mysite,method="h"):
             line += "%.3f"%hdata[s] + "\t"
             if msapaths.__len__() > 1:
                 for m in msapaths:
-                    if s in msa_refsite_mysite[m]:
-                        mys = msa_refsite_mysite[m][s]
+                    if s in ap.params["msa_refsite2mysite"][m]:
+                        mys = ap.params["msa_refsite2mysite"][m][s]
                         line += "%.3f"%msa_scores[m][mys] + "\t"
                     else:
                         line += "\t"
@@ -929,11 +931,10 @@ def write_table(hdata, msa_scores,msa_refsite_mysite,method="h"):
         fout.write(line)
     fout.close()
 
-def rank_sites(blended_data, msa_nodes, msa_refsite_mysite, msa_scores, method="h", writetable=True):
+def rank_sites(blended_data, msa_scores, method="h", writetable=True):
     """This method takes the site-value data and orders the sites in ascending order.
     Data is written to the *.ranked.txt file."""
     
-    #print "696:", msa_nodes
     score_refsites = {} # key = score, value = array of ref_sites with this score
     sites = blended_data.keys()
     sites.sort()
@@ -950,12 +951,12 @@ def rank_sites(blended_data, msa_nodes, msa_refsite_mysite, msa_scores, method="
 
     msa_thatanc_lines = {}
     msa_thisanc_lines = {}
-    for msapath in msa_nodes:
-        that_ancpath = msa_nodes[msapath][0]
+    for msapath in ap.params["msa_comparisons"]:
+        that_ancpath = ap.params["msa_comparisons"][msapath][0]
         fin = open(that_ancpath, "r")
         msa_thatanc_lines[msapath] = fin.readlines()
         fin.close()
-        this_ancpath = msa_nodes[msapath][1]
+        this_ancpath = ap.params["msa_comparisons"][msapath][1]
         fin = open(this_ancpath, "r")
         msa_thisanc_lines[msapath] = fin.readlines() 
         fin.close()
@@ -969,16 +970,16 @@ def rank_sites(blended_data, msa_nodes, msa_refsite_mysite, msa_scores, method="
                 lout += " " + method + " = %.3f"%h
                 lout += " rank: " + (i+1).__str__()
                 lout += "\n" 
-                for msapath in msa_nodes:
-                    if refsite in msa_refsite_mysite[msapath]:
-                        mys = msa_refsite_mysite[msapath][refsite]
-                        lout += ap.params["msaname"][ msapath ] + " site " + mys.__str__() + " (" + method + " = %.3f"%msa_scores[msapath][mys] + ")\n"
+                for msapath in ap.params["msa_comparisons"]:
+                    if refsite in ap.params["msa_refsite2mysite"][msapath]:
+                        mys = ap.params["msa_refsite2mysite"][msapath][refsite]
+                        lout += ap.params["msanames"][ msapath ] + " site " + mys.__str__() + " (" + method + " = %.3f"%msa_scores[msapath][mys] + ")\n"
                         for l in msa_thatanc_lines[msapath]:
                             if l.startswith(mys.__str__() + " "):
-                                lout += "   " + datpath_to_short(msa_nodes[msapath][0]) + "\tsite " + re.sub("site ", "", l)
+                                lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msapath][0]) + "\tsite " + re.sub("site ", "", l)
                         for l in msa_thisanc_lines[msapath]:
                             if l.startswith(mys.__str__() + " "):
-                                lout += "   " + datpath_to_short(msa_nodes[msapath][1]) + "\tsite " + re.sub("site ", "", l)
+                                lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msapath][1]) + "\tsite " + re.sub("site ", "", l)
                 lout += "\n"
                 fout.write(lout)
         fout.close()
