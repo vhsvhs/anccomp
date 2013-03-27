@@ -26,7 +26,7 @@
 
  --restrict_sites <list> // limit the analysis to the sites in the list. This option cannot be used with --limstop or --limstart.
 
- --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, h, hp, and p.
+ --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, h, hb, and p.
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.
 
@@ -87,11 +87,12 @@ sites on which to restrict this analysis for the MSA at msapath.
 print "\n. I'm building a restriction site library. . ."
 
 limstart = 1
-limstop = ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys().__len__() + 1
+lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+limstop = ap.params["msa_refsite2mysite"][ lnick ].keys().__len__() + 1
 
 ap.params["rsites"] = {}
-for msapath in ap.params["msanames"]:
-    ap.params["rsites"][msapath] = []
+for msa in ap.params["msa_nick2path"]:
+    ap.params["rsites"][msa] = []
 
 
 if (ap.doesContainArg("--limstart") or ap.doesContainArg("--limstop")) and ap.doesContainArg("--restrict_sites"):
@@ -107,9 +108,10 @@ x = ap.getOptionalArg("--limstop")
 if x != False:
     limstop = int(x)
 for site in range(limstart, limstop):
-    if site in ap.params["msa_refsite2mysite"][ap.params["longest_msa"]]:
+    if site in ap.params["msa_refsite2mysite"][lnick]:
         #print "adding site:", site
-        ap.params["rsites"][ap.params["longest_msa"]].append(site) 
+        #print ap.params["rsites"].keys()
+        ap.params["rsites"][lnick].append(site) 
 
 
 
@@ -117,25 +119,25 @@ for site in range(limstart, limstop):
 x = ap.getOptionalList("--restrict_sites")
 if x != None:
     for i in x:
-        ap.params["rsites"][ap.params["longest_msa"]].append(i)
+        ap.params["rsites"][lnick].append(i)
 else:
     for i in range(limstart, limstop+1):
-        ap.params["rsites"][ap.params["longest_msa"]].append(i)
+        ap.params["rsites"][lnick].append(i)
 
 # Map the restriction sites onto each MSA:
-for site in ap.params["rsites"][ap.params["longest_msa"]]:
-    for msapath in ap.params["msanames"]:
-        if msapath != ap.params["longest_msa"]:
-            if site in ap.params["msa_refsite2mysite"][msapath]:
-                ap.params["rsites"][msapath].append( ap.params["msa_refsite2mysite"][msapath][site] )
+for site in ap.params["rsites"][lnick]:
+    for msanick in ap.params["msa_nick2path"]:
+        if msanick != lnick:
+            if site in ap.params["msa_refsite2mysite"][msanick]:
+                ap.params["rsites"][msanick].append( ap.params["msa_refsite2mysite"][msanick][site] )
 
 # Cull the invariant sites from our analysis:
 for site in ap.params["invariant_sites"]:
-    if site in ap.params["rsites"][ap.params["longest_msa"]]:
-        ap.params["rsites"][ ap.params["longest_msa"] ].pop(site)
-        for msapath in ap.params["msanames"]:
-            if site in ap.params["msa_refsite2mysite"][msapath]:
-                ap.params["rsites"][msapath].pop( ap.params["msa_refsite2mysite"][msapath][site] )    
+    if site in ap.params["rsites"][lnick]:
+        ap.params["rsites"][ lnick ].pop(site)
+        for msanick in ap.params["msa_nick2path"]:
+            if site in ap.params["msa_refsite2mysite"][msanick]:
+                ap.params["rsites"][msanick].pop( ap.params["msa_refsite2mysite"][msanick][site] )    
 
 #print "\n. I'm excluding the following invariant sites:", 
 #print ap.params["invariant_sites"]
@@ -152,9 +154,9 @@ Calculate statistics comparing the ancestral DAT files.
 #old_ancs = []
 #new_ancs = []
 #ap.params["anc_msasource"] = {}
-#for msapath in ap.params["msanames"]:
-#    this_ancpath = ap.params["msanames"][msapath][0]
-#    that_ancpath = ap.params["msanames"][msapath][1]
+#for msapath in ap.params["msa_path2nick"]:
+#    this_ancpath = ap.params["msa_path2nick"][msapath][0]
+#    that_ancpath = ap.params["msa_path2nick"][msapath][1]
 #    #old_ancs.append(this_ancpath)
 #    #new_ancs.append(that_ancpath)
 #    ap.params["anc_msasource"][ this_ancpath ] = msapath
@@ -188,17 +190,17 @@ w = 1
 metric_data = {} # key = metric ID, value = hashtable of data
 if "h" in metrics:
     metric_data["h"] = {}
-if "hp" in metrics:
-    metric_data["hp"] = {}
+if "hb" in metrics:
+    metric_data["hb"] = {}
 if "p" in metrics:
     metric_data["p"] = {}
 
-for msapath in ap.params["msanames"]:
-    this_ancpath = ap.params["msa_comparisons"][msapath][0]
-    that_ancpath = ap.params["msa_comparisons"][msapath][1]
+for msanick in ap.params["msa_nick2path"]:
+    this_ancpath = ap.params["msa_comparisons"][msanick][0]
+    that_ancpath = ap.params["msa_comparisons"][msanick][1]
     print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "] with a smoothing window =", w
     for metric in metrics:
-        metric_data[metric][msapath] = compare_dat_files(this_ancpath, that_ancpath, m, w, method=metric)    
+        metric_data[metric][msanick] = compare_dat_files(this_ancpath, that_ancpath, m, w, method=metric)    
 
 """
 Part 4:
