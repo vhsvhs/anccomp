@@ -216,6 +216,20 @@ def get_msa_len(p):
     fin.close()
     return float(lines[0].strip().split()[1])
 
+def get_seed_seq(msapath, seed):
+    seed_seq = ""
+    fin = open(msapath, "r")
+    for l in fin.readlines():
+        if l.__len__() > 1:
+            if l.split()[0] == seed:
+                tokens = l.split()
+                seed_seq = tokens[1]
+    fin.close()
+    if seed_seq.__len__() == 0:
+        print "\n. Hmmm, I couldn't find a seed sequence for ", seed, "in ", msapath
+        exit()
+    return seed_seq
+
 
 def align_msas():
     # Find the longest MSA. . .
@@ -236,16 +250,17 @@ def align_msas():
     # Find the seed sequence in each MSA. . .
     msa_seedseq = {}
     for p in msapaths:
-        msa_seedseq[p] = ""
-        fin = open(p, "r")
-        for l in fin.readlines():
-            if l.__len__() > 1:
-                if l.split()[0] == seed:
-                    tokens = l.split()
-                    msa_seedseq[p] = tokens[1]
-        fin.close()
-        if msa_seedseq[p].__len__() == 0:
-            print "\n. Hmmm, I couldn't find a seed sequence for ", seed, "in ", p
+        msa_seedseq[p] = get_seed_seq(p, seed)
+        
+#        fin = open(p, "r")
+#        for l in fin.readlines():
+#            if l.__len__() > 1:
+#                if l.split()[0] == seed:
+#                    tokens = l.split()
+#                    msa_seedseq[p] = tokens[1]
+#        fin.close()
+#        if msa_seedseq[p].__len__() == 0:
+#            print "\n. Hmmm, I couldn't find a seed sequence for ", seed, "in ", p
         
     # verify that the focus sequences are actually the SAME sequence 
     for p in msapaths:
@@ -903,17 +918,17 @@ def blend_msa_data(msa_data):
                 skip_this_site = True
 
         if skip_this_site == False:
-           for alg in msa_data:
-                mysite = ap.params["msa_refsite2mysite"][alg][ref_site]
+           for msa in msa_data:
+                mysite = ap.params["msa_refsite2mysite"][msa][ref_site]
                 #  alg, mysite, ref_site
                 myscore = 0.0
                 if mysite != None:
-                    myscore = msa_data[alg][mysite]
+                    myscore = msa_data[msa][mysite]
                 if mysite != None:
                     if ref_site in bdata:            
-                        bdata[ref_site] += (ap.params["msa_weights"][alg] * myscore)
+                        bdata[ref_site] += (ap.params["msa_weights"][msa] * myscore)
                     else:
-                        bdata[ref_site] = ap.params["msa_weights"][alg] * myscore
+                        bdata[ref_site] = ap.params["msa_weights"][msa] * myscore
     return bdata
 
 def write_table(hdata, msa_scores, method="h"):
@@ -1016,12 +1031,14 @@ def get_bins(min, max, stride):
         minbin = 0.0
         while minbin > min:
             minbin -= stride
-    elif min > 0:
+    elif min >= 0:
         minbin = 0.0
+    #print "minbin=", minbin, min
     if max > 0:
         maxbin = 0.0
         while maxbin < max:
             maxbin += stride
+    #print "maxbin=", maxbin, max
     i = minbin
     while i < maxbin:
         if i > 0.0 and 0.0 not in bins:
@@ -1088,10 +1105,14 @@ def plot_histogram(metric_data, tag):
         elif maxx - minx > 0.01:
             binwidth = 0.0005
     
+        if ap.doesContainArg("--force_bin_width"):
+            binwidth = float( ap.getArg("--force_bin_width") )
+            #print binwidth, maxx-minx
+            #exit()
+            
+        #print "1111:"
         bins = get_bins(minx, maxx, binwidth)
-        #print "884:", metric
-        #print "885:", bins
-        #print "886:", maxx, minx, maxx-minx
+        #print "1113"
         metric_bin_count[metric] = {}
         for b in bins:
             metric_bin_count[metric][b] = 0.0
@@ -1107,9 +1128,7 @@ def plot_histogram(metric_data, tag):
         Write the R script.
         """        
         pdfpath = tag + "." + metric + ".pdf"
-        
         cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
-        #cranstr += "bars <- read.table(\"" + tablepath + "\", header=T, sep=\"\\t\")\n"
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
@@ -1140,8 +1159,7 @@ def plot_histogram(metric_data, tag):
         fout = open(cranpath, "w")
         fout.write( cranstr )
         fout.close()
-        cranpaths.append(cranpath)
-        #os.system("r --no-save < " + cranpath)       
+        cranpaths.append(cranpath) 
     return cranpaths
 
 def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):    

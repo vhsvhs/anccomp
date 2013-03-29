@@ -45,7 +45,7 @@ Read the input.
 """
 specpath = ap.getArg("--specpath")
 modelpath = ap.getArg("--modelpath")
-winsizes = ap.getList("--window_sizes", type=int)
+ap.params["winsizes"] = ap.getList("--window_sizes", type=int)
 adir = get_anccomp_dir(ap)
 if not os.path.exists(adir):
     os.system("mkdir " + adir)
@@ -56,7 +56,8 @@ metrics = ap.getOptionalList("--metrics")
 if metrics == None:
     metrics = ["h"]
 
-
+if ap.doesContainArg("--restrict_sites") or ap.doesContainArg("--restrict_to_seed"):
+    ap.params["winsizes"] = [1]
 
 """ 
 Part 2:
@@ -100,31 +101,30 @@ if (ap.doesContainArg("--limstart") or ap.doesContainArg("--limstop")) and ap.do
     print ". I'm quitting."
     exit()
 
-"""Option 1: the user specified --limstart and/or limstop."""
-x = ap.getOptionalArg("--limstart")
-if x != False:
-    limstart = int(x)
-x = ap.getOptionalArg("--limstop")
-if x != False:
-    limstop = int(x)
-for site in range(limstart, limstop):
-    if site in ap.params["msa_refsite2mysite"][lnick]:
-        #print "adding site:", site
-        #print ap.params["rsites"].keys()
-        ap.params["rsites"][lnick].append(site) 
-
-
-
-""" Option 2: the user specified --restrict_sites."""
+# Build the restriction site library, using the site numbers in the longest MSA. . .
 x = ap.getOptionalList("--restrict_sites")
+y = ap.getOptionalArg("--restrict_to_seed")
 if x != None:
     for i in x:
         ap.params["rsites"][lnick].append(i)
+elif y != None:
+    print "\n. I'm restricting the analysis to only those sites found in the seed sequence", ap.params["seed"]
+    seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
+    for site in range(0, limstop-1):
+        if seed_seq[site] != "-":
+            ap.params["rsites"][lnick].append(site)
+            print site
 else:
+    x = ap.getOptionalArg("--limstart")
+    if x != False:
+        limstart = int(x)
+    y = ap.getOptionalArg("--limstop")
+    if y != False:
+        limstop = int(y)
     for i in range(limstart, limstop+1):
         ap.params["rsites"][lnick].append(i)
 
-# Map the restriction sites onto each MSA:
+# Map the restriction sites onto the other MSAs. . . 
 for site in ap.params["rsites"][lnick]:
     for msanick in ap.params["msa_nick2path"]:
         if msanick != lnick:
@@ -145,40 +145,6 @@ for site in ap.params["invariant_sites"]:
 #print "\n. The analysis will focus on the following sites only:"
 #print ap.params["rsites"]
 
-"""
-Part 2c:
-Calculate statistics comparing the ancestral DAT files.
-"""
-#print "\n. I'm calculating distances between your ancestral .dat files. . ."
-#
-#old_ancs = []
-#new_ancs = []
-#ap.params["anc_msasource"] = {}
-#for msapath in ap.params["msa_path2nick"]:
-#    this_ancpath = ap.params["msa_path2nick"][msapath][0]
-#    that_ancpath = ap.params["msa_path2nick"][msapath][1]
-#    #old_ancs.append(this_ancpath)
-#    #new_ancs.append(that_ancpath)
-#    ap.params["anc_msasource"][ this_ancpath ] = msapath
-#    ap.params["anc_msasource"][ that_ancpath ] = msapath
-#
-#fout = open(adir + "/dat_comparison.txt", "w")
-#for o in old_ancs:
-#    for p in old_ancs:
-#        if o != p:
-#            #anc_data = {}
-#            #anc_data[o] = anc_ppvals[o]
-#            #anc_data[p] = anc_ppvals[p]
-#            x = compare_dat_files_stats(o,p,ap.params["msa_mysite2refsite"], ap.params["msa_refsite2mysite"])
-#            print o, p, x
-#            fout.write(o + "\t")
-#            fout.write(p + "\t")
-#            fout.write( "%.4f"%(float(x[1])/x[0]) + "\t")
-#            fout.write( "%.4f"%(float(x[2])/x[0]) + "\t")
-#            fout.write( "%.4f"%(float(x[3])/x[0]) + "\t")
-#            fout.write( "%.4f"%(float(x[4])/x[0]) + "\t")
-#            fout.write( x[0].__str__() + "\n")        
-#fout.close()
 
 """
 Part 3:
@@ -206,12 +172,29 @@ for msanick in ap.params["msa_nick2path"]:
 Part 4:
 Integrate the results over multiple alignments.
 """
-#print metric_data
-#exit()
 metric_blendeddata = {} # key = metric ID, value = hashtable of blended (i.e. integrated) data
 for metric in metrics:
     print "\n. I'm integrating the data for", metric, "from across all the alignments."
     metric_blendeddata[metric] = blend_msa_data(metric_data[metric])
+
+
+#"""
+#Part 4b:
+#Compress and clean the results, if restriction sites have been used.
+#"""
+#if False != ap.getOptionalArg("--renumber_sites"):
+#    ref2short = {}
+#    count = 0
+#    for site in ap.params["rsites"][lnick]:
+#        count += 1
+#        ref2short[site] = count
+#    for metric in metrics:
+#        # things to re-number:
+#        # metric_data[metric][msanick]
+#        # metric_blendeddata[metric]
+#        # ap.params["msa_refsite2mysite"][msanick]
+#        # ap.params["msa_mysite2refsite"][msanick]
+
 
 """
 Part 5:
@@ -219,28 +202,35 @@ Write output, including text tables and PDF plots.
 """
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end.    
 
-metric_ranked = {}
-for metric in metrics:
-    write_table(metric_blendeddata[metric], metric_data[metric], method=metric)
-    metric_ranked[metric] = rank_sites(metric_blendeddata[metric], metric_data[metric], method=metric)
-
-if metrics.__len__() > 1:
-    metric_comparisons = []
-    for i in range(0, metrics.__len__()):
-        for j in range(i, metrics.__len__()):
-            metric_comparisons.append( (metrics[i], metrics[j]) )
-    for comparison in metric_comparisons:
-        this_metric = comparison[0]
-        that_metric = comparison[1]
-        for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
-            cranpaths.append( cranpath )
+if False == ap.doesContainArg("--skip_sort"):
+    metric_ranked = {}
+    for metric in metrics:
+        print "\n. I'm ranking the data for", metric, "from across all the alignments."
+        write_table(metric_blendeddata[metric], metric_data[metric], method=metric)
+        print "\n."
+        metric_ranked[metric] = rank_sites(metric_blendeddata[metric], metric_data[metric], method=metric)
+    
+    if metrics.__len__() > 1:
+        metric_comparisons = []
+        for i in range(0, metrics.__len__()):
+            for j in range(i, metrics.__len__()):
+                metric_comparisons.append( (metrics[i], metrics[j]) )
+        for comparison in metric_comparisons:
+            this_metric = comparison[0]
+            that_metric = comparison[1]
+            for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
+                cranpaths.append( cranpath )
         
 w_metric_blendeddata = {} # key = window size for smoothing, value = hashtable, where key = metric ID, value = blended data
-for w in winsizes:    
+for w in ap.params["winsizes"]:    
     w_metric_blendeddata[w] = {}
     for metric in metrics:
         w_metric_blendeddata[w][metric] = {}
-        w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
+        if w == 1:
+            w_metric_blendeddata[w][metric] = metric_blendeddata[metric] # pass through
+        else:
+            w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
+            
     
     if w == 1:
         plot_outpath = get_plot_outpath(ap, tag=("histo" ) )
@@ -261,7 +251,6 @@ for w in winsizes:
             fout.write(metric + "\t %.3f"%mean_val + "\t %.3f"%sdev + "\n")
         fout.close()
 
-        
     for metric in metrics:
         plot_outpath = get_plot_outpath(ap, tag=(metric + ".w=" + w.__str__()) )
         combo_substring = ""
