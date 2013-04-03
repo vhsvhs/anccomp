@@ -30,6 +30,8 @@
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.
 
+ --renumber_site True // The output plots and tables will use site numbers relative to the seed sequence, rather than to the absolute alignment.
+
 """
 
 from config import *
@@ -86,58 +88,7 @@ sites on which to restrict this analysis for the MSA at msapath.
 
 """
 print "\n. I'm building a restriction site library. . ."
-
-limstart = 1
-lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-limstop = ap.params["msa_refsite2mysite"][ lnick ].keys().__len__() + 1
-
-ap.params["rsites"] = {}
-for msa in ap.params["msa_nick2path"]:
-    ap.params["rsites"][msa] = []
-
-
-if (ap.doesContainArg("--limstart") or ap.doesContainArg("--limstop")) and ap.doesContainArg("--restrict_sites"):
-    print "\n. Sorry, I'm confused.  You cannot specific --restrict_sites along with --limstart or --limstop."
-    print ". I'm quitting."
-    exit()
-
-# Build the restriction site library, using the site numbers in the longest MSA. . .
-x = ap.getOptionalList("--restrict_sites")
-y = ap.getOptionalArg("--restrict_to_seed")
-if x != None:
-    for i in x:
-        ap.params["rsites"][lnick].append(i)
-elif y != None:
-    print "\n. I'm restricting the analysis to only those sites found in the seed sequence", ap.params["seed"]
-    seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
-    for site in range(0, limstop-1):
-        if seed_seq[site] != "-":
-            ap.params["rsites"][lnick].append(site)
-            print site
-else:
-    x = ap.getOptionalArg("--limstart")
-    if x != False:
-        limstart = int(x)
-    y = ap.getOptionalArg("--limstop")
-    if y != False:
-        limstop = int(y)
-    for i in range(limstart, limstop+1):
-        ap.params["rsites"][lnick].append(i)
-
-# Map the restriction sites onto the other MSAs. . . 
-for site in ap.params["rsites"][lnick]:
-    for msanick in ap.params["msa_nick2path"]:
-        if msanick != lnick:
-            if site in ap.params["msa_refsite2mysite"][msanick]:
-                ap.params["rsites"][msanick].append( ap.params["msa_refsite2mysite"][msanick][site] )
-
-# Cull the invariant sites from our analysis:
-for site in ap.params["invariant_sites"]:
-    if site in ap.params["rsites"][lnick]:
-        ap.params["rsites"][ lnick ].pop(site)
-        for msanick in ap.params["msa_nick2path"]:
-            if site in ap.params["msa_refsite2mysite"][msanick]:
-                ap.params["rsites"][msanick].pop( ap.params["msa_refsite2mysite"][msanick][site] )    
+build_rsites()   
 
 #print "\n. I'm excluding the following invariant sites:", 
 #print ap.params["invariant_sites"]
@@ -178,24 +129,6 @@ for metric in metrics:
     metric_blendeddata[metric] = blend_msa_data(metric_data[metric])
 
 
-#"""
-#Part 4b:
-#Compress and clean the results, if restriction sites have been used.
-#"""
-#if False != ap.getOptionalArg("--renumber_sites"):
-#    ref2short = {}
-#    count = 0
-#    for site in ap.params["rsites"][lnick]:
-#        count += 1
-#        ref2short[site] = count
-#    for metric in metrics:
-#        # things to re-number:
-#        # metric_data[metric][msanick]
-#        # metric_blendeddata[metric]
-#        # ap.params["msa_refsite2mysite"][msanick]
-#        # ap.params["msa_mysite2refsite"][msanick]
-
-
 """
 Part 5:
 Write output, including text tables and PDF plots.
@@ -220,7 +153,7 @@ if False == ap.doesContainArg("--skip_sort"):
             that_metric = comparison[1]
             for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
                 cranpaths.append( cranpath )
-        
+            
 w_metric_blendeddata = {} # key = window size for smoothing, value = hashtable, where key = metric ID, value = blended data
 for w in ap.params["winsizes"]:    
     w_metric_blendeddata[w] = {}
@@ -230,10 +163,10 @@ for w in ap.params["winsizes"]:
             w_metric_blendeddata[w][metric] = metric_blendeddata[metric] # pass through
         else:
             w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
-            
-    
+        
     if w == 1:
         plot_outpath = get_plot_outpath(ap, tag=("histo" ) )
+        # Plot the histogram of values. . . .
         for cranpath in plot_histogram(w_metric_blendeddata[w], plot_outpath):
             cranpaths.append( cranpath )
         

@@ -367,6 +367,77 @@ def align_msas():
     ap.params["msa_refsite2mysite"] = ap.params["msa_refsite2mysite"]
     ap.params["msa_mysite2refsite"] = ap.params["msa_mysite2refsite"]
 
+
+def build_rsites():
+    lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+    
+    ap.params["rsites"] = {}
+    for msa in ap.params["msa_nick2path"]:
+        ap.params["rsites"][msa] = []
+    
+    
+    if (ap.doesContainArg("--limstart") or ap.doesContainArg("--limstop")) and ap.doesContainArg("--restrict_sites"):
+        print "\n. Sorry, I'm confused.  You cannot specific --restrict_sites along with --limstart or --limstop."
+        print ". I'm quitting."
+        exit()
+    
+    limstart = 1
+    limstop = ap.params["msa_refsite2mysite"][ lnick ].keys().__len__() + 1
+    
+    # Build the restriction site library, using the site numbers in the longest MSA. . .
+    x = ap.getOptionalList("--restrict_sites")
+    y = ap.getOptionalArg("--restrict_to_seed")
+    if x != None:
+        for i in x:
+            ap.params["rsites"][lnick].append(int(i))
+            #print i
+    elif y != None:
+        print "\n. I'm restricting the analysis to only those sites found in the seed sequence", ap.params["seed"]
+        seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
+        for site in range(0, limstop-1):
+            if seed_seq[site] != "-":
+                ap.params["rsites"][lnick].append(site)
+                print site
+    else:
+        x = ap.getOptionalArg("--limstart")
+        if x != False:
+            limstart = int(x)
+        y = ap.getOptionalArg("--limstop")
+        if y != False:
+            limstop = int(y)
+        for i in range(limstart, limstop+1):
+            ap.params["rsites"][lnick].append(i)
+    
+    # Map the restriction sites onto the other MSAs. . . 
+    for site in ap.params["rsites"][lnick]:
+        for msanick in ap.params["msa_nick2path"]:
+            if msanick != lnick:
+                if site in ap.params["msa_refsite2mysite"][msanick]:
+                    ap.params["rsites"][msanick].append( ap.params["msa_refsite2mysite"][msanick][site] )
+    
+    # Cull the invariant sites from our analysis:
+    for site in ap.params["invariant_sites"]:
+        if site in ap.params["rsites"][lnick]:
+            ap.params["rsites"][ lnick ].pop(site)
+            for msanick in ap.params["msa_nick2path"]:
+                if site in ap.params["msa_refsite2mysite"][msanick]:
+                    ap.params["rsites"][msanick].pop( ap.params["msa_refsite2mysite"][msanick][site] ) 
+
+    if ap.doesContainArg("--renumber_sites"):
+        ref2seed = {} # key = reference site, value = corresponding seed sequence site
+        count = 0
+        for site in ap.params["rsites"][lnick]:
+            count += 1
+            ref2seed[site] = count
+    
+        ap.params["msa_mysite2seedsite"] = {}
+        for msanick in ap.params["msa_nick2path"]:
+            ap.params["msa_mysite2seedsite"][msanick] = {}
+            for mysite in ap.params["rsites"][msanick]:
+                ap.params["msa_mysite2seedsite"][msanick][mysite] = ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
+                #print msanick, mysite, ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
+    
+
 def compare_dat_files(patha, pathb, m, winsize, method="h"):
     """Compares *.dat files for two ancestors from the same alignment."""
     """Returns windata and consdata"""
@@ -797,9 +868,11 @@ def apply_filter(index,array,window, winsize):
     if max > sites[ sites.__len__()-1 ]:
         max = sites[ sites.__len__()-1 ]
     sum = 0.0
+    #print min, max
     for i in range(min, max):
-        delta = i - min
-        sum += array[i] * window[delta]
+        if i in array:
+            delta = i - min
+            sum += array[i] * window[delta]
     #print "site", index, "raw=", array[index], "min=", min, "max=", max, "sum=", sum
     return sum
 
@@ -869,6 +942,9 @@ def plot(data, outpath, title, ylab, color):
     
     minx = sites[0]
     maxx = sites[ sites.__len__()-1 ]
+    if ap.doesContainArg("--renumber_sites"):
+        minx = 1
+        maxx = sites.__len__()
         
     for s in sites:
         yval = 0
@@ -878,9 +954,12 @@ def plot(data, outpath, title, ylab, color):
             else:
                 yval = math.log( float(data[s]) + 1.0 )
     
+    lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
     for s in sites:
-        #print s
-        x += s.__str__() + ","
+        if ap.doesContainArg("--renumber_sites"):
+            x += int(ap.params["msa_mysite2seedsite"][lnick][s]).__str__() + ","
+        else:
+            x += s.__str__() + ","
         if data[s] != None:
             y += data[s].__str__() + ","
             if float(data[s]) > maxy:
@@ -904,19 +983,28 @@ def plot(data, outpath, title, ylab, color):
     return cranpath
 
 def blend_msa_data(msa_data):
+    """This method sums the site scores from all the alignments into a single vector of site scores.
+    INPUT: msa_data[msa algorithm][site] = score
+    OUTPUT: bdata[site] = summed score
+    """
     bdata = {} # key = reference site from MSA-MSA, value = blended score
     lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+    
     for ref_site in ap.params["msa_refsite2mysite"][ lnick ].keys():
+        # Skip sites not in the restriction sites array.  (If no rsites settings were given by the user,
+        # then all sites, by default, should be in the rsites array).
         if ref_site not in ap.params["rsites"][ lnick ]:
             continue
-        """Does this ref_site exist in all alignments?"""
+        
+        # First check if this site exists in all the alignments.  If not, then skip this site.
         skip_this_site = False        
         for msa in msa_data:
             #print "651: msa = ", msa
-            if False == ap.params["msa_refsite2mysite"][msa].keys().__contains__( ref_site ):
+            if ref_site not in ap.params["msa_refsite2mysite"][msa]:
                 bdata[ref_site] = 0.0
                 skip_this_site = True
 
+        # Next, sum the scores from all the alignments.
         if skip_this_site == False:
            for msa in msa_data:
                 mysite = ap.params["msa_refsite2mysite"][msa][ref_site]
@@ -935,8 +1023,8 @@ def write_table(hdata, msa_scores, method="h"):
     foutpath = get_table_outpath(ap, tag=method + ".summary.txt")
     fout = open(foutpath, "w")
     lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-    sites = ap.params["msa_refsite2mysite"][ lnick ].keys()
-    sites.sort()
+    refsites = ap.params["msa_refsite2mysite"][ lnick ].keys()
+    refsites.sort()
     msapaths = msa_scores.keys()
     msapaths.sort()
     header = ""
@@ -949,9 +1037,13 @@ def write_table(hdata, msa_scores, method="h"):
     fout.write(header)
 
     line = ""
-    for s in sites:
+    for s in refsites:
         if s in ap.params["rsites"][ lnick ]:
-            line = s.__str__() + "\t"
+            #print "965:", s 
+            if ap.doesContainArg("--renumber_sites"):
+                line = ap.params["msa_mysite2seedsite"][lnick][s].__str__() + "\t"
+            else:
+                line = s.__str__() + "\t"
             line += "%.3f"%hdata[s] + "\t"
             if msapaths.__len__() > 1:
                 for m in msapaths:
@@ -961,7 +1053,7 @@ def write_table(hdata, msa_scores, method="h"):
                     else:
                         line += "\t"
             line += "\n"
-        fout.write(line)
+            fout.write(line)
     fout.close()
 
 def rank_sites(blended_data, msa_scores, method="h", writetable=True):
