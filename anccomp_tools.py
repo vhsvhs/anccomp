@@ -387,26 +387,30 @@ def build_rsites():
     # Build the restriction site library, using the site numbers in the longest MSA. . .
     x = ap.getOptionalList("--restrict_sites")
     y = ap.getOptionalArg("--restrict_to_seed")
+    p = ap.getOptionalArg("--limstart")
+    q = ap.getOptionalArg("--limstop")
+    seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
     if x != None:
         for i in x:
             ap.params["rsites"][lnick].append(int(i))
             #print i
-    elif y != None:
+    elif y != False and p == False and q == False:
         print "\n. I'm restricting the analysis to only those sites found in the seed sequence", ap.params["seed"]
-        seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
         for site in range(0, limstop-1):
             if seed_seq[site] != "-":
                 ap.params["rsites"][lnick].append(site)
                 print site
     else:
-        x = ap.getOptionalArg("--limstart")
-        if x != False:
-            limstart = int(x)
-        y = ap.getOptionalArg("--limstop")
-        if y != False:
-            limstop = int(y)
+        if p != False:
+            limstart = int(p)
+        if q != False:
+            limstop = int(q)
         for i in range(limstart, limstop+1):
-            ap.params["rsites"][lnick].append(i)
+            if y != False:
+                if seed_seq[i] != "-": 
+                    ap.params["rsites"][lnick].append(i)
+            else:
+                ap.params["rsites"][lnick].append(i)                
     
     # Map the restriction sites onto the other MSAs. . . 
     for site in ap.params["rsites"][lnick]:
@@ -976,7 +980,7 @@ def plot(data, outpath, title, ylab, color):
     cranout.write( y + "\n")
         
     cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
-    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='sites', ylab='" + ylab + "', main='" + title + "', lwd=2, col='" + color + "');\n")
+    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, col='" + color + "');\n")
     cranout.write("points(x, y, lwd=2, type='l', col='" + color + "');\n")
     cranout.write("dev.off();\n")
     cranout.close()

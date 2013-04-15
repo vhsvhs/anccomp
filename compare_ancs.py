@@ -63,7 +63,7 @@ if ap.doesContainArg("--restrict_sites") or ap.doesContainArg("--restrict_to_see
 
 """ 
 Part 2:
-Align the alignments, using the method align_msas().
+Align the alignments, using the method align_m sas().
 The mapping of sites from the reference MSA to other MSAs will be written to two hashtables:
     ap.params["msa_refsite2mysite"]
     and ap.params["msa_mysite2refsite"]
