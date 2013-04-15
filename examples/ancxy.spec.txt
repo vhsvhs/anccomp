@@ -1,6 +1,4 @@
-msapaths xy.fasta
+msaname xy.phylip MSAxy
 seed ta
-msaweight xy.fasta 1.0
-compare ancx.dat ancy.dat xy.fasta
-
-
+msaweight MSAxy 1.0
+compare ancx.dat ancy.dat MSAxy

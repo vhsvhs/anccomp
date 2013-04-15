@@ -14,8 +14,8 @@ class ArgParser:
             return self.args[i+1]
         else:
             message = "You did not specify the required command-line argument: " + flag 
-            print "(ERROR) " + message
-            raise AssertionError
+            print "\n. Error: " + message + "\n"
+            #raise AssertionError
             exit(1)
             
     # this is somewhat a hack:
