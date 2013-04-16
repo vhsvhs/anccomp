@@ -26,6 +26,8 @@
 
  --restrict_sites <list> // limit the analysis to the sites in the list. This option cannot be used with --limstop or --limstart.
 
+ --restrict_to_seed
+
  --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, h, hb, and p.
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.

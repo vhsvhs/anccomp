@@ -175,6 +175,7 @@ def read_specs(ap):
     seed = ""
     ap.params["msa_path2nick"] = {}
     ap.params["msa_nick2path"] = {}
+    ap.params["msa_seedseq"] = {}
     fin = open(specpath, "r")
     for l in fin.readlines():
         if l.startswith("#"): # skip lines with comments
@@ -204,6 +205,10 @@ def read_specs(ap):
     fin.close()    
     check_specs()
     
+    for msapath in ap.params["msa_path2nick"]:
+        seedseq = get_seed_seq(msapath, ap.params["seed"])
+        ap.params["msa_seedseq"][ msapath ] = seedseq
+        
 def check_specs():
     """This method cross-references the configuration values in the spec. file."""
     for msanick in ap.params["msa_comparisons"]:
@@ -263,7 +268,6 @@ def get_seed_seq(msapath, seed):
         exit()
     return seed_seq
 
-
 def align_msas():
     """Aligns each alignment file to the longest alignment.  This allows for
     ancestral inferences to be compared between alignments, despite the fact that
@@ -291,20 +295,18 @@ def align_msas():
     
     if msapaths.__len__() > 1:
         print "\n. I'm aligning the alignments, using taxa", seed, "as the seed."
-    
-    # Find the seed sequence in each MSA. . .
-    msa_seedseq = {}
-    for p in msapaths:
-        msa_seedseq[p] = get_seed_seq(p, seed)
-                
+                    
     # Verify that the seed sequences are actually the SAME sequence in each alignment.
+    msa_noindel = {} # key = msa path, value = seed sequence without indels
     for p in msapaths:
-        if re.sub("\-", "", msa_seedseq[p]).__len__() != re.sub("\-", "", msa_seedseq[longest_msa]).__len__():
-            print re.sub("\-", "", msa_seedseq[p])
-            print re.sub("\-", "", msa_seedseq[longest_msa])
-            print "\n. Hmmm, I had to stop because the seed sequence is not the same in all your alignments."
-            print ". Tip: Check if you used a truncated version of the seed sequence in some of the alignments."
-            print ""
+        msa_noindel[p] = re.sub("\-", "", ap.params["msa_seedseq"][p])
+    
+    for p in msapaths:
+        if msa_noindel[p] != msa_noindel[ longest_msa ]:
+            print "\n. Sorry, I had to stop because the seed sequence is not the same in all your alignments."
+            print ". Tip: Check if you used a truncated version of the seed sequence in one of the alignments."
+            print re.sub("\-", "", ap.params["msa_seedseq"][p])
+            print re.sub("\-", "", ap.params["msa_seedseq"][longest_msa])
             exit()
 
     # Align the seed sequences. . .
@@ -318,10 +320,10 @@ def align_msas():
         ap.params["msa_mysite2refsite"][nick] = {}
         ref_site = 1
         my_site = 1
-        while my_site-1 < msa_seedseq[p].__len__() and ref_site-1 < msa_seedseq[longest_msa].__len__():
-            if msa_seedseq[p][my_site-1] == msa_seedseq[longest_msa][ref_site-1]:
-                my_state = msa_seedseq[p][my_site-1]
-                ref_state = msa_seedseq[longest_msa][ref_site-1]
+        while my_site-1 < ap.params["msa_seedseq"][p].__len__() and ref_site-1 < ap.params["msa_seedseq"][longest_msa].__len__():
+            if ap.params["msa_seedseq"][p][my_site-1] == ap.params["msa_seedseq"][longest_msa][ref_site-1]:
+                my_state = ap.params["msa_seedseq"][p][my_site-1]
+                ref_state = ap.params["msa_seedseq"][longest_msa][ref_site-1]
                 if my_state != ref_state:
                     print "\n. Hmmm, something went wrong with the meta-alignment."
                     print " (anccomp_tools.py point 205."
@@ -333,11 +335,11 @@ def align_msas():
                 ref_site += 1
                 my_site += 1
                 #continue
-            elif msa_seedseq[longest_msa][ref_site-1] == "-":
-                while msa_seedseq[longest_msa][ref_site-1] == "-" and ref_site < msa_seedseq[longest_msa].__len__()+1:
+            elif ap.params["msa_seedseq"][longest_msa][ref_site-1] == "-":
+                while ap.params["msa_seedseq"][longest_msa][ref_site-1] == "-" and ref_site < ap.params["msa_seedseq"][longest_msa].__len__()+1:
                     ref_site += 1
-            elif msa_seedseq[p][my_site-1] == "-":
-                while msa_seedseq[p][my_site-1] == "-" and my_site < msa_seedseq[p].__len__()+1:
+            elif ap.params["msa_seedseq"][p][my_site-1] == "-":
+                while ap.params["msa_seedseq"][p][my_site-1] == "-" and my_site < ap.params["msa_seedseq"][p].__len__()+1:
                     my_site += 1
     
     # Write the meta-alignment to a text file:
@@ -381,10 +383,10 @@ def write_meta_alignment(ap):
     msa_ids[longest_msa] = 1
     ids_msa[1] = longest_msa
     counter = 2
-    for p in msapaths:
-        if p != longest_msa:
-            msa_ids[ p ] = counter
-            ids_msa[ counter ] = p
+    for path in ap.params["msa_path2nick"]:
+        if path != longest_msa:
+            msa_ids[ path ] = counter
+            ids_msa[ counter ] = path
             counter += 1
     fout = open(get_output_dir(ap) + "/meta_alignment.txt", "w")
     ids = ids_msa.keys()
@@ -399,13 +401,13 @@ def write_meta_alignment(ap):
     for i in ids:
         header += "M" + i.__str__() + "\t"
     fout.write(header + "\n\n")
-    for site in range(0, msa_seedseq[longest_msa].__len__()):
+    for site in range(0, ap.params["msa_seedseq"][longest_msa].__len__()):
         line = ""
         for i in ids:
             msanick = ap.params["msa_path2nick"][ids_msa[i]]
             if (site+1) in ap.params["msa_refsite2mysite"][ msanick ]:
                 mysite = ap.params["msa_refsite2mysite"][ msanick ][ site+1 ]
-                state = msa_seedseq[ids_msa[i]][mysite-1]
+                state = ap.params["msa_seedseq"][ids_msa[i]][mysite-1]
                 line += mysite.__str__() + " (" + state + ")\t"
             else:
                 line += "x\t"
@@ -987,7 +989,7 @@ def fill_missing_sites(data):
 def plot(data, outpath, title, ylab, color):
     #data = fill_missing_sites(data)
     
-    cranpath = outpath + ".cran"
+    cranpath = outpath + ".rscript"
     cranout = open(cranpath, "w")
     x = "x <- c("
     y = "y <- c("
@@ -1234,7 +1236,7 @@ def get_bin(value, bins):
             ret = i
     return ret
 
-def plot_histogram(metric_data, tag):
+def plot_histogram(metric_data):
     cranpaths = []
     metric_bin_count = {}
     for metric in metric_data:
@@ -1303,7 +1305,7 @@ def plot_histogram(metric_data, tag):
         """
         Write the R script.
         """        
-        pdfpath = tag + "." + metric + ".pdf"
+        pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
         cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
     
         #for metric in metric_data:
@@ -1331,7 +1333,7 @@ def plot_histogram(metric_data, tag):
 #        cranstr += "abline(v=" + (avg-(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
 #        cranstr += "abline(v=" + (avg+(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
     
-        cranpath = tag + "." + metric + ".cran"
+        cranpath = get_plot_outpath(ap, tag=metric + "-histogram.rscript")
         fout = open(cranpath, "w")
         fout.write( cranstr )
         fout.close()
@@ -1406,7 +1408,7 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
     #return [spearmans, pearsons]
     
 def plot_correlation(data, outpath, title, color):
-    cranpath = outpath + ".cran"
+    cranpath = outpath + ".rscript"
     cranout = open(cranpath, "w")
     miny = 0.0
     maxy = 0.0
@@ -1471,9 +1473,8 @@ def smooth_data(metric_blendeddata):
                 w_metric_blendeddata[w][metric] = window_analysis(metric_blendeddata[metric], w, ap)
             
         if w == 1:
-            plot_outpath = get_plot_outpath(ap, tag=("histo" ) )
             # Plot the histogram of values. . . .
-            for cranpath in plot_histogram(w_metric_blendeddata[w], plot_outpath):
+            for cranpath in plot_histogram(w_metric_blendeddata[w]):
                 cranpaths.append( cranpath )
             
             stats_outpath = get_plot_outpath(ap, tag=("stats" ) ) + ".txt"
@@ -1491,7 +1492,8 @@ def smooth_data(metric_blendeddata):
             fout.close()
     
         for metric in ap.params["metrics"]:
-            plot_outpath = get_plot_outpath(ap, tag=(metric + ".w=" + w.__str__()) )
+            # Plot the data for each site. . .
+            plot_outpath = get_plot_outpath(ap, tag=(metric + "-by-site.w=" + w.__str__()) )
             combo_substring = ""
             if False != ap.getOptionalArg("--combo_method"):
                 combo_substring = ", " + ap.getOptionalArg("--combo_method")

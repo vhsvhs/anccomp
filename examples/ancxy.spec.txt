@@ -1,4 +1,8 @@
-msaname xy.phylip MSAxy
+msaname xy.phylip msa1
+msaname xy.msa2.phylip msa2
+
 seed ta
-msaweight MSAxy 1.0
-compare ancx.dat ancy.dat MSAxy
+msaweight msa1 1.0
+msaweight msa2 1.0
+compare ancx.dat ancy.dat msa1
+compare ancx.msa2.dat ancy.msa2.dat msa2
