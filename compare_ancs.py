@@ -74,20 +74,12 @@ build_rsites()
 Part 3:
 Compare the ancestors.
 """
-if ap.params["metrics"].__len__() > 1:
+if ap.params["metrics"].__len__() > 1: # plural. . .
     print "\n. I'm comparing ancestors using the following metrics:", ap.params["metrics"]
-else:
+else: # . . . or singular
     print "\n. I'm comparing ancestors using the metric", ap.params["metrics"][0]    
 
-metric_data = {} # metric_data[metric][msa nickname][site] = score
-for msanick in ap.params["msa_nick2path"]:
-    this_ancpath = ap.params["msa_comparisons"][msanick][0]
-    that_ancpath = ap.params["msa_comparisons"][msanick][1]
-    print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
-    for metric in ap.params["metrics"]:
-        if metric not in metric_data:
-            metric_data[metric] = {}
-        metric_data[metric][msanick] = compare_dat_files(this_ancpath, that_ancpath, msanick, metric)    
+[msa_changes, metric_data] = compare_ancestors() # metric_data[metric][msa nickname][site] = score
 
 """
 Part 4:

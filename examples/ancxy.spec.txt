@@ -1,8 +1,7 @@
 msaname xy.phylip msa1
 msaname xy.msa2.phylip msa2
-
-seed ta
 msaweight msa1 1.0
 msaweight msa2 1.0
+seed ta
 compare ancx.dat ancy.dat msa1
 compare ancx.msa2.dat ancy.msa2.dat msa2

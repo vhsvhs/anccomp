@@ -497,9 +497,8 @@ def build_rsites():
                 #print msanick, mysite, ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
     
 def compare_dat_files(patha, pathb, msanick, method):
-    """Compares two ancestors from the same alignment.
-        dat files are the format that is typically used to store ancestral
-        posterior probability vectors.
+    """Compares two ancestors (at patha and pathb) from the same alignment (with nicknamed msanick).
+        Comparison is perfomed using 'method'
         This method returns a hashtable, where key = site, value = comparison score at that site."""
     
     fin = open(patha, "r")
@@ -540,116 +539,155 @@ def dat2pp(datpath):
         data[site] = datline_2_pphash(l)
     return data
 
-#
-# Compares two DAT files
-#
-#def compare_dat_files_stats(datone, dattwo):    
-#    anc_data = {}
-#    anc_data[datone] = dat2pp(datone)
-#    anc_data[dattwo] = dat2pp(dattwo)
+
+def compare_ancestors():
+    msa_changes = {} # key = msa nickname, value = output from the method 'count_changes_between_ancestors'
+    metric_data = {}
+    for msanick in ap.params["msa_nick2path"]:
+        this_ancpath = ap.params["msa_comparisons"][msanick][0]
+        that_ancpath = ap.params["msa_comparisons"][msanick][1]
+        print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
+    
+        # Compare the ancestors in simple terms, by the number of amino acid changes and the number of indel changes, etc.
+        msa_changes[msanick] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
+        
+        # Compare the ancestors using our statistical metrics
+        for metric in ap.params["metrics"]:
+            if metric not in metric_data:
+                metric_data[metric] = {}
+            metric_data[metric][msanick] = compare_dat_files(this_ancpath, that_ancpath, msanick, metric)    
+    write_changes_summary(msa_changes)
+    return [msa_changes, metric_data]
+
+def write_changes_summary(msa_changes):
+
+        #print msa, nsites, countindel, countred, countorange, countgreen
+    fout = open(get_output_dir(ap) + "/ancestral_changes.txt", "w")
+    
+    key = "===============================================================================================\n"
+    key += "A summary of changes between ancestors AncX and AncY. . .\n\n"
+    key += "Key:\n\n"
+    key += "N sites: the total number of sites in AncX and AncY.\n"
+    key += "Indel changes: the number of insertion or deletions between the two ancestors.\n"
+    key += "Type 1: AncY has a different ML state than AncX, and AncX has no support for AncY's state,\n"
+    key += "        and AncY has no support for AncX's state.\n"
+    key += "Type 2: AncY has a different ML state than AncX, but AncX has mild support for AncY's state,\n"
+    key += "        or AncY has mild support for AncX's state.\n"
+    key += "Type 3: AncX and AncY have the same ML state, but either AncX or AncY has strong uncertainty\n"
+    key += "        about this state.\n"
+    key += "==============================================================================================\n\n" 
+    fout.write(key)
+    
+    header = "\tN sites\tN indel\tType1\tTyp2\tType3\n"
+    fout.write(header)
+    for msa in msa_changes:
+        [nsites, countindel, countred, countorange, countgreen] = msa_changes[msa]
+        fout.write(msa + "\t" + nsites.__str__() + "\t" + countindel.__str__() + "\t" + countred.__str__() + "\t" + countorange.__str__() + "\t" + countgreen.__str__() + "\n")
+    fout.close()
+    
+    
+
+def count_changes_between_ancestors(patha, pathb, msanick):    
+    """Counts the number of amino acid differences between two ancestors."""
+    anc_data = {}
+    anc_data[patha] = dat2pp(patha)
+    anc_data[pathb] = dat2pp(pathb)
+        
+    #
+    # These variables will be filled with values over the duration
+    # of this method. . .
+    #
+    nsites = 0
+    countindel = 0
+    countred = 0    # sites with different ML states
+    countorange = 0 # sites with different ML states, but same ML+1 states
+    countgreen = 0  # sites same ML state, but one ancestor is uncertain
+    redsites = []
+    orangesites = []
+    greensites = []
+    
+    sites = ap.params["msa_mysite2refsite"][msanick].keys()
+    sites.sort()
+
+    for site in sites:
+        if site in ap.params["rsites"][msanick]:            
+            nsites += 1
+            indel = False
+            red = False
+            orange = False
+            green = False
+             
+            #print site           
+            a_state = getmlstate( anc_data[patha][site] )
+            b_state = getmlstate( anc_data[pathb][site] )
+            #print "609:", anc_data[patha][site]
+            #print "610:", anc_data[pathb][site]
+            # test for indel mismatch:
+            if b_state != a_state:
+                if b_state == "-" or a_state == "-":
+                    indel = True
+                    #print "indel"
+                elif False == anc_data[pathb][site].keys().__contains__(a_state):
+                    red = True
+                    #print "red"
+                elif False == anc_data[ patha ][site].keys().__contains__(b_state):
+                    red = True
+                    #print "red"
+                elif anc_data[patha][site][b_state] < 0.05 and anc_data[pathb][site][a_state] < 0.05:
+                    red = True
+                    #print "red"
+                # test for orange:
+                else:
+                    orange = True
+                    #print "orange"
+            # test for green
+            elif (anc_data[pathb][site][b_state] < 0.8 and anc_data[patha][site][b_state] > 0.8) or (anc_data[pathb][site][b_state] > 0.8 and anc_data[patha][site][b_state] < 0.8):
+                    green = True
+                    #print "green"
+                    
+            
+            
+            
+            if indel:
+                countindel += 1
+            if red:
+                countred += 1
+                redsites.append(site)
+                ##print "site", site, " - case 1"
+                ##print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+            if orange:
+                countorange +=1
+                orangesites.append(site)
+                #print "site", site, " - case 2"
+                #print "\t", getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+            if green:
+                countgreen += 1
+                greensites.append(site)
+                #print "site", site, " - case 3"
+                #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
+                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
+        
+    return [nsites, countindel, countred, countorange, countgreen]
+    
+#    print "============================================================"
+#    print "Legend:"
+#    print "- case 1: sites with disagreeing ML states, and neither ancestral vector has strong support for the others' state."
+#    print "- case 2: sites with disagreeing ML states, but one or both of the ancestral vectors has PP < 0.05 for the others' ML state."
+#    print "- case 3: sites with the same ML state, but one of the ancestral vectors strongly supports (PP > 0.8) the state, while the other vector poorly supports (PP < 0.8) the state."
+#    print "============================================================"
+#    print "\n"
 #    
-#    msaone = ap.params["anc_msasource"][datone]
-#    msatwo = ap.params["anc_msasource"][dattwo]
-#    
-#    # compare dat files:
-#    nsites = 0
-#    countindel = 0
-#    countred = 0 # different states
-#    countorange = 0 # diff. states, but pairwise secondary states
-#    countgreen = 0 # same state, but adds uncertainty
-#    redsites = []
-#    orangesites = []
-#    greensites = []
-#    
-#    sites = ap.params["msa_refsite2mysite"][ ap.params["longest_msa"] ].keys()
-#
-#    for site in sites:
-#        #
-#        # to-do: filter for rsites
-#        #    rsites = ap.params["rsites"][ap.params["anc_msasource"][datpath]]
-#        #    longest_msa = ap.params["longest_msa"]
-#        
-#        if site not in ap.params["msa_refsite2mysite"][msaone].keys() and site not in ap.params["msa_refsite2mysite"][msatwo].keys():
-#            continue
-#        else:
-#            nsites += 1
-#        
-#        indel = False
-#        red = False
-#        orange = False
-#        green = False
-#        
-#        if site not in ap.params["msa_refsite2mysite"][msaone] or site not in ap.params["msa_refsite2mysite"][msatwo]:
-#            indel = True
-#            countindel += 1
-#            continue
-#        
-#        siteone = ap.params["msa_refsite2mysite"][msaone][site]
-#        sitetwo = ap.params["msa_refsite2mysite"][msatwo][site]
-#        a_state = getmlstate( anc_data[datone][siteone] )
-#        b_state = getmlstate( anc_data[dattwo][sitetwo] )
-#        if b_state == None:
-#            indel = True
-#        # test for indel mismatch:
-#        elif b_state != a_state:
-#            if b_state == "-" or a_state == "-":
-#                indel = True
-#        # test for red:
-#        elif b_state != a_state and indel == False:
-#            if False == anc_data[dattwo][sitetwo].keys().__contains__(a_state):
-#                red = True
-#            elif False == anc_data[ datone ][siteone].keys().__contains__(b_state):
-#                red = True
-#            elif anc_data[datone][siteone][b_state] < 0.05 and anc_data[dattwo][sitetwo][a_state] < 0.05:
-#                red = True
-#        # test for orange:
-#        elif b_state != a_state and red == False and indel == False:
-#            orange = True
-#        # test for green
-#        elif b_state == a_state:
-#            #print "372:",  anc, site, b_state
-#            if (anc_data[dattwo][sitetwo][b_state] < 0.8 and anc_data[datone][siteone][b_state] > 0.8) or (anc_data[dattwo][sitetwo][b_state] > 0.8 and anc_data[datone][siteone][b_state] < 0.8):
-#                green = True
-#        if indel:
-#            countindel += 1
-#        if red:
-#            countred += 1
-#            redsites.append(site)
-#            #print "site", site, " - case 1"
-#            #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-#            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
-#        if orange:
-#            countorange +=1
-#            orangesites.append(site)
-#            #print "site", site, " - case 2"
-#            #print "\t", getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-#            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
-#        if green:
-#            countgreen += 1
-#            greensites.append(site)
-#            #print "site", site, " - case 3"
-#            #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-#            #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
-#    
-#    return [nsites, countindel, countred, countorange, countgreen]
-#    
-##    print "============================================================"
-##    print "Legend:"
-##    print "- case 1: sites with disagreeing ML states, and neither ancestral vector has strong support for the others' state."
-##    print "- case 2: sites with disagreeing ML states, but one or both of the ancestral vectors has PP < 0.05 for the others' ML state."
-##    print "- case 3: sites with the same ML state, but one of the ancestral vectors strongly supports (PP > 0.8) the state, while the other vector poorly supports (PP < 0.8) the state."
-##    print "============================================================"
-##    print "\n"
-##    
-##    print "============================================================"
-##    print "Summary:"
-##    print "nsites=", nsites
-##    print "indel_mismatch=", countindel
-##    print "case 1=", countred, "sites: ",  redsites
-##    print "case 2=", countorange, "sites: ",  orangesites
-##    print "case 3=", countgreen, "sites: ", greensites
-##    print "============================================================"
-##    print "\n\n"
+#    print "============================================================"
+#    print "Summary:"
+#    print "nsites=", nsites
+#    print "indel_mismatch=", countindel
+#    print "case 1=", countred, "sites: ",  redsites
+#    print "case 2=", countorange, "sites: ",  orangesites
+#    print "case 3=", countgreen, "sites: ", greensites
+#    print "============================================================"
+#    print "\n\n"
 
 
 def compute_cdata(msapath, winsize):
@@ -1081,6 +1119,15 @@ def blend_msa_data(msa_data):
                         bdata[ref_site] = ap.params["msa_weights"][msa] * myscore
     return bdata
 
+def write_change_summary_table(msa_changes):
+    """Writes a table with a summary of how many states changed between ancestors."""
+    for msanick in msa_changes:
+        this_ancpath = ap.params["msa_comparisons"][msanick][0]
+        that_ancpath = ap.params["msa_comparisons"][msanick][1]
+        
+        # [nsites, countindel, countred, countorange, countgreen]
+        
+
 
 def write_summary_table(hdata, msa_scores):
     for metric in ap.params["metrics"]:
@@ -1339,6 +1386,9 @@ def plot_histogram(metric_data):
         fout.close()
         cranpaths.append(cranpath) 
     return cranpaths
+
+
+
 
 def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):    
     cranpaths = []
