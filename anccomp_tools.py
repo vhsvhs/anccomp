@@ -236,14 +236,14 @@ def check_specs():
 def check_msa(msapath):
     """Verify that the multiple sequence alignment at path 'msapath' is a
     valid Phylip-formatted alignment."""
-    fin = open(msapath, "r")
-    for l in fin.xreadlines():
-        tokens = l.split()
-        if tokens.__len__() < 2 or tokens.__len__() > 2:
-            print "\n. Error: I don't think your alignment is in Phylip format."
-            print ". Please check your alignment:", msapath, "\n"
-            exit()
-    fin.close()
+#    fin = open(msapath, "r")
+#    for l in fin.xreadlines():
+#        tokens = l.split()
+#        if tokens.__len__() < 2 or tokens.__len__() > 2:
+#            print "\n. Error: I don't think your alignment is in Phylip format."
+#            print ". Please check your alignment:", msapath, "\n"
+#            exit()
+#    fin.close()
 
 def get_msa_len(p):
     #print path
@@ -459,7 +459,7 @@ def build_rsites():
             limstop = int(q)
         print "\n. I'm restricting the analysis to sites", limstart, "to", limstop, "in", lnick
         if y != False:
-            print "  and which are homologous to a non-indel in the seed", seed_seq
+            print "  and which are homologous to a non-indel in the seed."
         for site in range(limstart, limstop+1):
             if y != False:
                 if seed_seq[site-1] != "-": 
@@ -578,7 +578,7 @@ def write_changes_summary(msa_changes):
     key += "==============================================================================================\n\n" 
     fout.write(key)
     
-    header = "\tN sites\tN indel\tType1\tTyp2\tType3\n"
+    header = "Alignment & Model\tN sites\tN indel\tType1\tType2\tType3\n"
     fout.write(header)
     for msa in msa_changes:
         [nsites, countindel, countred, countorange, countgreen] = msa_changes[msa]
@@ -622,11 +622,18 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             b_state = getmlstate( anc_data[pathb][site] )
             #print "609:", anc_data[patha][site]
             #print "610:", anc_data[pathb][site]
+            #print b_state, a_state, patha, pathb, site
             # test for indel mismatch:
-            if b_state != a_state:
-                if b_state == "-" or a_state == "-":
+            if b_state == None and a_state == None:
+                continue
+            elif b_state != a_state:
+                if b_state == None or a_state == None:
                     indel = True
                     #print "indel"
+                elif b_state not in anc_data[patha][site]:
+                    red = True
+                elif a_state not in anc_data[pathb][site]:
+                    red = True
                 elif False == anc_data[pathb][site].keys().__contains__(a_state):
                     red = True
                     #print "red"
@@ -643,9 +650,6 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             # test for green
             elif (anc_data[pathb][site][b_state] < 0.8 and anc_data[patha][site][b_state] > 0.8) or (anc_data[pathb][site][b_state] > 0.8 and anc_data[patha][site][b_state] < 0.8):
                     green = True
-                    #print "green"
-                    
-            
             
             
             if indel:
@@ -1074,7 +1078,7 @@ def plot(data, outpath, title, ylab, color):
     y += ")"
     cranout.write( y + "\n")
         
-    cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
+    cranout.write("pdf('" + outpath + ".pdf', width=8, height=2.5);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, col='" + color + "');\n")
     cranout.write("points(x, y, lwd=2, type='l', col='" + color + "');\n")
     cranout.write("dev.off();\n")
@@ -1353,7 +1357,7 @@ def plot_histogram(metric_data):
         Write the R script.
         """        
         pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
-        cranstr = "pdf(\"" + pdfpath + "\", width=8, height=4);\n"    
+        cranstr = "pdf(\"" + pdfpath + "\", width=8, height=2.5);\n"    
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
