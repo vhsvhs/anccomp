@@ -28,7 +28,7 @@
 
  --restrict_to_seed
 
- --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, h, hb, and p.
+ --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, hb, p, k
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.
 

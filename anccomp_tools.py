@@ -763,7 +763,9 @@ def information_gain(ppx, ppy, m):
 def geometric_distance(i, j, ppi, ppj, m):
     return abs(ppi - ppj)
 
-def kl_divergence(ppx, ppy, m):
+def kl_divergence(ppx, ppy):
+    """Calculates the one-way Kullback-Leibler divergence between ppx and ppy"""
+
     # this first part is classic KL...
     ret = 0.0    
     
@@ -807,58 +809,14 @@ def getmlstate(pp):
                 maxpp = pp[a]
     return maxa
             
-def hdist(ppx, ppy, method):
-    m = ap.params["model"]
-    
-    # 1. Get reciprocal KL distance. . .     
-    klxy = kl_divergence(ppx, ppy, m)
-    klyx = kl_divergence(ppy, ppx, m)
+def kdist(ppx, ppy):
+    klxy = kl_divergence(ppx, ppy)
+    klyx = kl_divergence(ppy, ppx)
     klsum = klxy + klyx
+    return klsum    
             
-    if method == "h":
-    # 2. Calculate the importance of the a.a. changes. . .
-        s = 0.0
-        for a in AA_ALPHABET:
-            for b in AA_ALPHABET:
-                if ppx[a] > 1.0/(AA_ALPHABET.__len__()) and ppy[b] > ppx[b] and a!=b:
-                    s_part = (1.0/m[a][b])
-                    s_part *= ppx[a] * ppy[b]
-                    s += s_part
-
-    elif method == "hb":
-        # 3. Calculate observed/expected probability shifts:
-        expected_p = 0.0
-        observed_p = 0.0
-        for a in AA_ALPHABET:
-            for b in AA_ALPHABET:
-                if a != b:
-                    expected_p += ppx[a] * math.exp( m[a][b] )
-                    observed_p += ppx[a] * ppy[b]
-        s = observed_p / expected_p
-    
-    # 4. Adjust the sign +/- based on the direction of entropy change
-    enty = entropy(ppy)
-    entx = entropy(ppx)
-    e_dir = 1
-    if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF:
-    #if (entx - enty) <= ENTROPY_CUTOFF:
-        e_dir *= -1
-
-    # 5. Combine evidence from 1, 2, and 3
-    # Multiple by 100 to make the numbers interpretable
-    combostyle = ap.getOptionalArg("--combo_method")
-    if combostyle == False:
-        combostyle = "product"
-    if combostyle == "sum":
-        h = klsum + (1-w)*s + e_dir
-    elif combostyle == "product":
-        h = klsum * s * e_dir
-    return h
-
-
 def pdist(ppx, ppy):
     m = ap.params["model"]
-    
     expected_p = 0.0
     observed_p = 0.0
     for a in AA_ALPHABET:
@@ -866,25 +824,17 @@ def pdist(ppx, ppy):
             if a != b:
                 expected_p += ppx[a] * math.exp( m[a][b] )
                 observed_p += ppx[a] * ppy[b]
-    #print "421:", ppx, ppy, expected_p, observed_p
     pval = observed_p / expected_p
+    return pval
 
+def e_scale(ppx, ppy):
     enty = entropy(ppy)
     entx = entropy(ppx)
     e_dir = 1
     if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF:
-    #if (entx - enty) <= ENTROPY_CUTOFF:
         e_dir *= -1
+    return e_dir
 
-    return e_dir * pval * 100
-
-def mutual_information(ppx, ppy):
-    ret = 0.0
-    for a in AA_ALPHABET:
-        if ppx[a] > 0.0:
-            for b in AA_ALPHABET:
-                if ppy[b] > 0.0:
-                    ret += ppx[a]*ppy[a]*math.log()
 
 def entropy(h, ppcull=0.0):
     # first cull low values, if that was requested...
@@ -898,29 +848,10 @@ def entropy(h, ppcull=0.0):
         epy += newh[c] * math.log( newh[c] )
     return -1.0 * epy
 
-def method8(ancx, ancy, m):
-    expect = {}
-    for a in AA_ALPHABET:
-        for b in AA_ALPHABET:
-            if b not in expect:
-                expect[b] = 0.0
-            expect[b] += ancx[a] * m[a][b]
-    # normalize expect:
-    sum = 0.0
-    for a in expect:
-        sum += expect[a]
-    for a in expect:
-        expect[a] = expect[a] / sum
-
-    # compare expect to observation:
-    ret = 0.0
-    for a in AA_ALPHABET:
-        ret += abs( expect[a] - ancy[a] )
-    return ret
-
-def d(ancx, ancy, method="h"):
+def d(ancx, ancy, method="hb"):
     """Compares a single site in ancestor x to a single site in ancestor Y."""    
 
+    # First, fix the PP vector to contain no zeros.
     if "-" in ancx.keys() or "X" in ancx.keys():
         ancx = {}
         for aa in AA_ALPHABET:
@@ -929,21 +860,28 @@ def d(ancx, ancy, method="h"):
         ancy = {}
         for aa in AA_ALPHABET:
             ancy[aa] = 0.05
-    """Second, compare the site..."""
-    if method == "h" or method == "hb":
-        return hdist(ancx, ancy, method=method)        
-    elif method == "p":
-        return pdist(ancx, ancy)
             
-def cons_delta(ancx, ancy):
-    entx = 0.0
-    enty = 0.0
-    if "-" not in ancx.keys() and "X" not in ancx.keys():
-        entx = entropy(ancx)
-    if "-" not in ancy.keys() and "X" not in ancy.keys():
-        enty = entropy(ancy)
-    #print entx, enty, (entx-enty)
-    return (entx - enty)
+    pieces = []        
+    
+    # entropy:
+    pieces.append( e_scale(ancx, ancy) )
+    if method == "hb":
+        # observed/expectation
+        pieces.append( pdist(ancx, ancy) )
+        # KL distance
+        pieces.append( kdist(ancx, ancy) )
+    elif method == "k":
+        # KL distance only
+        pieces.append( kdist(ancx, ancy) )
+    elif method == "p":
+        # observed/expectation only
+        pieces.append( pdist(ancx, ancy) )
+
+    score = 100.0
+    for piece in pieces:
+        score *= piece
+
+    return score
 
 def window_analysis(data, winsize, ap):
     winmethod = ap.getOptionalArg("--window_function")
@@ -1173,24 +1111,23 @@ def write_summary_table(hdata, msa_scores):
         fout.close()
 
 def rank_and_correlate(metric_data, metric_blendeddata):
-    cranpaths = []
-    for metric in ap.params["metrics"]:
-        metric_ranked = {}
-        for metric in ap.params["metrics"]:
-            print "\n. I'm ranking the data for", metric, "from across all the alignments."
-            metric_ranked[metric] = rank_sites(metric_blendeddata[metric], metric_data[metric], method=metric)
-    
-        if False == ap.doesContainArg("--skip_correlation"):
-            if ap.params["metrics"].__len__() > 1:
-                metric_comparisons = []
-                for i in range(0, ap.params["metrics"].__len__()):
-                    for j in range(i, ap.params["metrics"].__len__()):
-                        metric_comparisons.append( (ap.params["metrics"][i], ap.params["metrics"][j]) )
-                for comparison in metric_comparisons:
-                    this_metric = comparison[0]
-                    that_metric = comparison[1]
-                    for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
-                        cranpaths.append( cranpath )
+    cranpaths = [] # a list of R scripts that will be executed.
+    metric_ranked = {}
+    for i in ap.params["metrics"]:
+        print "\n. I'm ranking the data for", i, "from across all the alignments."
+        metric_ranked[i] = rank_sites(metric_blendeddata[i], metric_data[i], method=i)
+
+    if False == ap.doesContainArg("--skip_correlation"):
+        if ap.params["metrics"].__len__() > 1:
+            metric_comparisons = []
+            for i in range(0, ap.params["metrics"].__len__()):
+                for j in range(i, ap.params["metrics"].__len__()):
+                    metric_comparisons.append( (ap.params["metrics"][i], ap.params["metrics"][j]) )
+            for comparison in metric_comparisons:
+                this_metric = comparison[0]
+                that_metric = comparison[1]
+                for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
+                    cranpaths.append( cranpath )
     return cranpaths
 
 def rank_sites(blended_data, msa_scores, method="h", writetable=True):
