@@ -28,11 +28,13 @@
 
  --restrict_to_seed
 
- --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include c, hb, p, k
+ --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include hb, p, k
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.
 
  --renumber_site True // The output plots and tables will use site numbers relative to the seed sequence, rather than to the absolute alignment.
+
+ --pdb_start_site X // at what site in the seed does the PDB file begin with?
 
 """
 
@@ -96,16 +98,24 @@ Part 5: Write output tables and plot PDFs.
 
 Part 5a: Write a summary table with all sites and their scores.
 """
-write_summary_table(metric_blendeddata[metric], metric_data[metric])
+metric_ranked = rank_all(metric_data, metric_blendeddata)
+write_summary_table(metric_blendeddata, metric_data, metric_ranked)
 
 """
 Part 5b: Rank the sites, and correlate metrics (only if multiple metrics were used).
 """
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end. 
-cranpaths += rank_and_correlate(metric_data, metric_blendeddata)
+
+
+
+
+cranpaths += correlate_all(metric_ranked, metric_blendeddata)
+
+
 
 """
 Part 5c: Smooth the data, using a user-specified window.
+         Scripts for R plots are also written in this method. . .
 """       
 cranpaths += smooth_data(metric_blendeddata)     
 
@@ -127,9 +137,8 @@ else:
 #Part 6:
 #If specified, visualize H scores on PyMol structure...
 #"""
-#if False != ap.getOptionalArg("--pdb_path"):
-#    seedseq = get_seq_from_msa(seed, ap.params["longest_msa"])
-#    do_pymol_viz(ap, blended_hdata, seedseq)
+if False != ap.getOptionalArg("--pdb_path"):
+    do_pymol_viz(ap, metric_blendeddata, ap.params["msa_seedseq"][ap.params["longest_msa"]])
 
 print "\n\n. Finished.  Results were written to the folder", get_plot_outpath(ap)
 print "\n. Goodbye."

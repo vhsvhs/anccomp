@@ -5,6 +5,19 @@ import scipy.stats as ss
 from argparser import *
 ap = ArgParser(sys.argv)
 
+METRIC_COLORS = {}
+METRIC_COLORS["hb"] = "black"
+METRIC_COLORS["k"] = "red"
+METRIC_COLORS["p"] = "blue"
+
+METRIC_WT = {}
+METRIC_WT["hb"] = "2.5"
+METRIC_WT["k"] = "1.0"
+METRIC_WT["p"] = "1.0"
+
+PDIST_WEIGHT = 1.0
+KDIST_WEIGHT = 1.0
+
 # set is an array of floats
 def mean(set):
     if set.__len__() == 0:
@@ -84,7 +97,8 @@ def datline_2_pphash(line):
     i = 0
     while i < tokens.__len__():
         if tokens[i].__contains__("-"):
-            h['-'] = 1.0
+            h["-"] = 1.0
+            h = fill_missing_states(h)
             return h
         h[ tokens[i].upper() ] = float(tokens[i+1])
         i += 2
@@ -164,8 +178,7 @@ def read_cli(ap):
 
     if ap.doesContainArg("--restrict_sites") or ap.doesContainArg("--restrict_to_seed"):
         ap.params["winsizes"] = [1]
-
-
+    
 def read_specs(ap):
     """Read specifications given in the spec. file (using the --specpath command)."""
     specpath = ap.getArg("--specpath")
@@ -418,6 +431,8 @@ def build_rsites():
     """Restrict the analysis to a subset of total sites.
     This part is optional, and will be invoked only if the user specified 
     --limstart, --limstop, --restruct_sites, or --restrict_to_seed.
+    Each of these parameters specifies the restriction sites in different ways.
+    See the user manual for more information.
     At the end of this method, a hashtable will be added to ap.params,
     named ap.params["rsites"], where key = nickname for an MSA, and 
     value is a list of sites that are usable in that MSA.
@@ -443,14 +458,17 @@ def build_rsites():
     p = ap.getOptionalArg("--limstart")
     q = ap.getOptionalArg("--limstop")
     seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
+    
     if x != None:
         for i in x:
             ap.params["rsites"][lnick].append(int(i))
             #print i
-    elif y != False and p == False and q == False:
+    
+    elif y == True and p == False and q == False:
         print "\n. I'm restricting the analysis to only those sites found in the seed sequence", ap.params["seed"]
         for site in range(1, limstop+1):
             if seed_seq[site-1] != "-":
+                #print "471:", site, seed_seq[site-1]
                 ap.params["rsites"][lnick].append(site)
     else:
         if p != False:
@@ -467,13 +485,18 @@ def build_rsites():
             else:
                 ap.params["rsites"][lnick].append(site)                
     
+    #print "488:", ap.params["rsites"][lnick]
+    #print "489:", ap.params["rsites"][lnick].__len__()
+    #exit()
+    
     # Map the restriction sites onto the other MSAs. . . 
     for site in ap.params["rsites"][lnick]:
+        #print "490:", site
         for msanick in ap.params["msa_nick2path"]:
             if msanick != lnick:
                 if site in ap.params["msa_refsite2mysite"][msanick]:
+                    #print "492:", site, msanick, lnick
                     ap.params["rsites"][msanick].append( ap.params["msa_refsite2mysite"][msanick][site] )
-    
     # Cull the invariant sites from our analysis:
 #    for site in ap.params["invariant_sites"]:
 #        if site in ap.params["rsites"][lnick]:
@@ -525,6 +548,7 @@ def compare_dat_files(patha, pathb, msanick, method):
             ancy = datline_2_pphash(bl) 
             # Compare ancestors X and Y at this site:      
             results[asite] = d(ancx, ancy, method=method)  
+    #print "551:", msanick, results.keys().__len__()
     return results
 
 def dat2pp(datpath):
@@ -586,7 +610,6 @@ def write_changes_summary(msa_changes):
     fout.close()
     
     
-
 def count_changes_between_ancestors(patha, pathb, msanick):    
     """Counts the number of amino acid differences between two ancestors."""
     anc_data = {}
@@ -741,24 +764,24 @@ def entropy(ppx):
             ret += (ppx[a] * math.log(ppx[a]))
     return ret
      
-        
-def conditional_entropy(ppx, ppy):
-    """Retuns H(ppy|ppx)"""
-    """Conditional entropy = h(y|x) = h(x,y) - h(x)"""
-    ret = 0.0
-    for a in AA_ALPHABET:
-        for b in AA_ALPHABET:
-            jointp = ppx[a]*ppy[b]
-            if jointp > 0:
-                ret +=  jointp * math.log( jointp )
-    ret = ret - entropy(ppx)
-    return -1 * ret
-
-
-def information_gain(ppx, ppy, m):
-    ret = 0.0
-    ret = entropy(ppy) - conditional_entropy(ppx, ppy)
-    return ret
+# depricated:
+#def conditional_entropy(ppx, ppy):
+#    """Retuns H(ppy|ppx)"""
+#    """Conditional entropy = h(y|x) = h(x,y) - h(x)"""
+#    ret = 0.0
+#    for a in AA_ALPHABET:
+#        for b in AA_ALPHABET:
+#            jointp = ppx[a]*ppy[b]
+#            if jointp > 0:
+#                ret +=  jointp * math.log( jointp )
+#    ret = ret - entropy(ppx)
+#    return -1 * ret
+#
+#
+#def information_gain(ppx, ppy, m):
+#    ret = 0.0
+#    ret = entropy(ppy) - conditional_entropy(ppx, ppy)
+#    return ret
 
 def geometric_distance(i, j, ppi, ppj, m):
     return abs(ppi - ppj)
@@ -767,32 +790,32 @@ def kl_divergence(ppx, ppy):
     """Calculates the one-way Kullback-Leibler divergence between ppx and ppy"""
 
     # this first part is classic KL...
-    ret = 0.0    
+    ret = TINY    
     
-    yvals = {}
-    xvals = {}
+    yvals = ppx
+    xvals = ppy
     
     # Set low values to be uncertain (i.e. == 0.05)
-    for a in AA_ALPHABET:
-        if ppy[a] < 0.01:
-            yvals[a] = 0.05
-        else:
-            yvals[a] = ppy[a]
-        if ppx[a] < 0.01:
-            xvals[a] = 0.05
-        else:
-            xvals[a] = ppx[a]
+#    for a in AA_ALPHABET:
+#        if ppy[a] < 0.01:
+#            yvals[a] = 0.05
+#        else:
+#            yvals[a] = ppy[a]
+#        if ppx[a] < 0.01:
+#            xvals[a] = 0.05
+#        else:
+#            xvals[a] = ppx[a]
     
     # Normalize. . . .
-    ysum = 0
-    for a in AA_ALPHABET:
-        ysum += yvals[a]
-    xsum = 0
-    for a in AA_ALPHABET:
-        xsum += xvals[a]
-    for a in AA_ALPHABET:
-        yvals[a] = yvals[a]/ysum
-        xvals[a] = xvals[a]/xsum
+#    ysum = 0
+#    for a in AA_ALPHABET:
+#        ysum += yvals[a]
+#    xsum = 0
+#    for a in AA_ALPHABET:
+#        xsum += xvals[a]
+#    for a in AA_ALPHABET:
+#        yvals[a] = yvals[a]/ysum
+#        xvals[a] = xvals[a]/xsum
     
     for a in AA_ALPHABET:
         #if ppy[a] > 0.01 and ppx[a] > 0.01:            
@@ -810,6 +833,9 @@ def getmlstate(pp):
     return maxa
             
 def kdist(ppx, ppy):
+    if "-" in ppx.keys() and "-" in ppy.keys(): # indel to indel. . .
+        return 0.0
+
     klxy = kl_divergence(ppx, ppy)
     klyx = kl_divergence(ppy, ppx)
     klsum = klxy + klyx
@@ -819,19 +845,27 @@ def pdist(ppx, ppy):
     m = ap.params["model"]
     expected_p = 0.0
     observed_p = 0.0
+    if "-" in ppx.keys() and "-" in ppy.keys(): # indel to indel. . .
+        return 0.0
+    pval = 0.0
     for a in AA_ALPHABET:
         for b in AA_ALPHABET:
             if a != b:
-                expected_p += ppx[a] * math.exp( m[a][b] )
-                observed_p += ppx[a] * ppy[b]
-    pval = observed_p / expected_p
+                #observed_p += ppx[a] * ppy[b]
+                #expected_p += ppx[a] * math.exp( m[a][b] )# * 0.01 ) # to-do: times branch length?
+                ep = ppx[a] * math.exp( m[a][b] )# * 0.01 ) # to-do: times branch length?
+                op = ppx[a] * ppy[b]
+                pval += abs( ep - op )**2
+                #pval += op / ep
+                #print "849", a, b, ppx[a], ppy[b], (ppx[a] * ppy[b]), (ppx[a] * math.exp( m[a][b] ))
+    #pval = observed_p / expected_p
     return pval
 
 def e_scale(ppx, ppy):
     enty = entropy(ppy)
     entx = entropy(ppx)
     e_dir = 1
-    if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF:
+    if (entx < enty) and ppy[ getmlstate(ppy) ] < CERTAINTY_CUTOFF and (enty - entx) > ENT_CUTOFF:
         e_dir *= -1
     return e_dir
 
@@ -852,35 +886,33 @@ def d(ancx, ancy, method="hb"):
     """Compares a single site in ancestor x to a single site in ancestor Y."""    
 
     # First, fix the PP vector to contain no zeros.
-    if "-" in ancx.keys() or "X" in ancx.keys():
-        ancx = {}
-        for aa in AA_ALPHABET:
-            ancx[aa] = 0.05
-    if "-" in ancy.keys() or "X" in ancy.keys():
-        ancy = {}
-        for aa in AA_ALPHABET:
-            ancy[aa] = 0.05
+#    if "-" in ancx.keys() or "X" in ancx.keys():
+#        ancx = {}
+#        for aa in AA_ALPHABET:
+#            ancx[aa] = 0.05
+#    if "-" in ancy.keys() or "X" in ancy.keys():
+#        ancy = {}
+#        for aa in AA_ALPHABET:
+#            ancy[aa] = 0.05
             
     pieces = []        
-    
-    # entropy:
-    pieces.append( e_scale(ancx, ancy) )
-    if method == "hb":
-        # observed/expectation
-        pieces.append( pdist(ancx, ancy) )
-        # KL distance
-        pieces.append( kdist(ancx, ancy) )
+    if method == "hb": # i.e., k times p
+        # observed/expectation:
+        pieces.append( PDIST_WEIGHT*pdist(ancx, ancy) )
+        # KL distance:
+        pieces.append( KDIST_WEIGHT*kdist(ancx, ancy) )
     elif method == "k":
-        # KL distance only
+        # KL distance only:
         pieces.append( kdist(ancx, ancy) )
     elif method == "p":
-        # observed/expectation only
+        # observed/expectation only:
         pieces.append( pdist(ancx, ancy) )
 
-    score = 100.0
-    for piece in pieces:
+    score = pieces[0]
+    for piece in pieces[1:]:
         score *= piece
-
+        
+    score *= e_scale(ancx, ancy)
     return score
 
 def window_analysis(data, winsize, ap):
@@ -952,22 +984,26 @@ def dirichlet_window_analysis(data, winsize):
 
 def fill_missing_sites(data):
     new_data = {}
-    min_s = data[data.keys()[0]]
-    max_s = min_s
+    min_s = int( data[data.keys()[0]] ) # lowest site
+    max_s = min_s                # highest site
     for s in data.keys():
         if s < min_s:
-            min_s = s
+            min_s = int( s )
         if s > max_s:
-            max_s = s
-    for i in range(1, max_s+1):
+            max_s = int( s )
+    for i in range(min_s, max_s+1):
         if i in data:
             new_data[i] = data[i]
         else:
-            new_data[i] = None
+            new_data[i] = 0.0
     return new_data
 
-def plot(data, outpath, title, ylab, color):
-    #data = fill_missing_sites(data)
+def plot_one_metric(data, outpath, title, ylab, color):
+    if False == ap.doesContainArg("--renumber_sites"):
+        data = fill_missing_sites(data)
+    
+    #print "1004:", data
+    #exit()
     
     cranpath = outpath + ".rscript"
     cranout = open(cranpath, "w")
@@ -978,22 +1014,23 @@ def plot(data, outpath, title, ylab, color):
 
     miny = 0.0
     maxy = 0.0
-    miny = 0.0
-    maxy = 0.0
-    
     minx = sites[0]
+    allvalues = []
     maxx = sites[ sites.__len__()-1 ]
     if ap.doesContainArg("--renumber_sites"):
         minx = 1
         maxx = sites.__len__()
-        
+    
     for s in sites:
         yval = 0
         if data[s] != None:
             if data[s] < 0.00000001:
                 yval = 0.0
             else:
-                yval = math.log( float(data[s]) + 1.0 )
+                yval = data[s]
+        #    else:
+        #        yval = math.log( float(data[s]) + 1.0 )
+        allvalues.append( yval )
     
     lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
     for s in sites:
@@ -1019,10 +1056,125 @@ def plot(data, outpath, title, ylab, color):
     cranout.write("pdf('" + outpath + ".pdf', width=8, height=2.5);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, col='" + color + "');\n")
     cranout.write("points(x, y, lwd=2, type='l', col='" + color + "');\n")
+    sdev = sd(allvalues)
+    cranout.write("abline(" + (2*sdev).__str__() + ",0, lwd=0.5, col='darkgreen');\n")
+    cranout.write("abline(" + (4*sdev).__str__() + ",0, lwd=0.5, col='lightgreen');\n")
+    cranout.write("abline(" + (-2*sdev).__str__() + ",0, lwd=0.5, col='darkgreen');\n")
+    cranout.write("abline(" + (-4*sdev).__str__() + ",0, lwd=0.5, col='lightgreen');\n")
     cranout.write("dev.off();\n")
     cranout.close()
     return cranpath
 
+def normalize_vector(v):
+    """Returns the data normalize to [-1,1]"""
+    min = None
+    max = None
+    norm_v = {}
+        
+    for site in v.keys():
+        i = v[site]
+        if i == None:
+            i = 0.0
+        if min == None:
+            min = i
+        if max == None:
+            max = i
+        if i < min:
+            min = i
+        if i > max:
+            max = i
+    
+    if max > -1*min:
+        normalizer = max
+    elif min < -1*max:
+        normalizer = -1*min
+    
+    for site in v.keys():
+        norm_v[site] = v[site] / normalizer
+
+    return norm_v
+
+def plot_multi_metrics(data, outpath, title):
+    """data[metric][site] = value for metric"""
+    
+    cranpath = outpath + ".rscript"
+    cranout = open(cranpath, "w")
+
+    sites = data[ data.keys()[0] ].keys()
+    sites.sort() 
+    minx = sites[0]
+    maxx = sites[ sites.__len__()-1 ]
+    if ap.doesContainArg("--renumber_sites"):
+        minx = 1
+        maxx = sites.__len__()
+        
+#
+#    depricated code to log-transform the plots
+#
+#    for s in sites:
+#        yval = 0
+#        if data[s] != None:
+#            if data[s] < 0.00000001:
+#                yval = 0.0
+#            else:
+#                yval = math.log( float(data[s]) + 1.0 )
+
+    cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
+    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(-1,1), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='normalized score', main='" + title + "', lwd=2, col='white');\n")
+    
+    metrics = data.keys()
+    metrics.sort(reverse=False)
+    for metric in metrics:
+        if False == ap.doesContainArg("--renumber_sites"):
+            this_data = fill_missing_sites(data[metric])
+        else:
+            this_data = data[metric]
+        norm_data = normalize_vector(this_data)
+        sites = norm_data.keys()
+        sites.sort()
+
+        lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+        x = "x" + metric + " <- c("
+        y = "y" + metric + " <- c("
+        for s in sites:
+            if ap.doesContainArg("--renumber_sites"):
+                x += int(ap.params["msa_mysite2seedsite"][lnick][s]).__str__() + ","
+            else:
+                x += s.__str__() + ","
+            if norm_data[s] != None:
+                if abs(norm_data[s]) < 0.00000001 and abs(norm_data[s]) > -0.00000001:
+                    y += "0.0,"
+                else:
+                    y += norm_data[s].__str__() + ","
+            else:
+                y += "0.0,"
+        x = re.sub(",$", "", x)
+        x += ")"
+        cranout.write( x + "\n")
+        y = re.sub(",$", "", y)
+        y += ")"
+        cranout.write( y + "\n")
+        cranout.write("points(x" + metric + ", y" + metric + ", lwd=" + METRIC_WT[metric].__str__() + ", type='l', col='" + METRIC_COLORS[metric] + "');\n")
+    
+    legx = "legx <- c("
+    for metric in data:
+        legx += "\"" + metric + "\","
+    legx = re.sub(",$", "", legx)
+    legx += ")"
+    cranout.write(legx + "\n")
+    legcol = "legcol <- c("
+    for metric in data:
+        legcol += "\"" + METRIC_COLORS[metric] + "\","
+    legcol = re.sub(",$", "", legcol)
+    legcol += ")"
+    cranout.write(legcol + "\n")
+    cranout.write("legend(\"topleft\", legx, pch = 20, col=legcol, title = \"Metrics\");\n")
+    
+    cranout.write("dev.off();\n")
+    cranout.close()
+    return cranpath
+    
+    
 def blend_msa_data(msa_data):
     """This method sums the site scores from all the alignments into a single vector of site scores.
     This integration relies on the meta-alignment, previously generated in the method align_msas.
@@ -1056,9 +1208,9 @@ def blend_msa_data(msa_data):
                     myscore = msa_data[msa][mysite]
                 if mysite != None:
                     if ref_site in bdata:            
-                        bdata[ref_site] += (ap.params["msa_weights"][msa] * myscore)
+                        bdata[ref_site] += (ap.params["msa_weights"][msa] * myscore) / msa_data.keys().__len__()
                     else:
-                        bdata[ref_site] = ap.params["msa_weights"][msa] * myscore
+                        bdata[ref_site] = ap.params["msa_weights"][msa] * myscore / msa_data.keys().__len__()
     return bdata
 
 def write_change_summary_table(msa_changes):
@@ -1071,62 +1223,83 @@ def write_change_summary_table(msa_changes):
         
 
 
-def write_summary_table(hdata, msa_scores):
-    for metric in ap.params["metrics"]:
-        foutpath = get_table_outpath(ap, tag=metric + ".summary.txt")
-        print "\n. I'm writing a table with", metric, "scores to", foutpath
-        fout = open(foutpath, "w")
-        lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-        refsites = ap.params["msa_refsite2mysite"][ lnick ].keys()
-        refsites.sort()
-        msapaths = msa_scores.keys()
-        msapaths.sort()
-        header = ""
-        header += "site\t"
-        header += metric + "\t"
-        if msapaths.__len__() > 1:
-            for m in msapaths:    
-                header += metric + "(" + m + ")\t"
-        header += "\n"
-        fout.write(header)
+def write_summary_table(data, msa_scores, metric_ranked):
+    foutpath = get_table_outpath(ap, tag="summary.txt")
+    print "\n. I'm writing a table with all scores to", foutpath
+    fout = open(foutpath, "w")
+    lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+    refsites = ap.params["msa_refsite2mysite"][ lnick ].keys()
+    refsites.sort()
+    msapaths = msa_scores[ap.params["metrics"][0]].keys()
+    msapaths.sort()
     
-        line = ""
-        for s in refsites:
-            if s in ap.params["rsites"][ lnick ]:
-                #print "965:", s 
-                if ap.doesContainArg("--renumber_sites"):
-                    line = ap.params["msa_mysite2seedsite"][lnick][s].__str__() + "\t"
-                else:
-                    line = s.__str__() + "\t"
-                line += "%.3f"%hdata[s] + "\t"
-                if msapaths.__len__() > 1:
-                    for m in msapaths:
+    metric_site_rank = {}
+    for metric in ap.params["metrics"]:
+        metric_site_rank[metric] = {}
+        rank = 1
+        for tuple in metric_ranked[metric]:
+            site = tuple[0]
+            metric_site_rank[metric][site] = rank
+            rank += 1
+    
+    
+    header = ""
+    header += "site\t"
+    for metric in ap.params["metrics"]:
+        header += metric + "\t"
+    for metric in ap.params["metrics"]:
+        header += metric + "_rank\t"
+    if msapaths.__len__() > 1:
+        for m in msapaths:
+            for metric in ap.params["metrics"]:
+                header += metric + ":" + m + "\t"
+    header += "\n"
+    fout.write(header)
+
+    line = ""
+    for s in refsites:
+        if s in ap.params["rsites"][ lnick ]:
+            #print "965:", s 
+            if ap.doesContainArg("--renumber_sites"):
+                line = ap.params["msa_mysite2seedsite"][lnick][s].__str__() + "\t"
+            else:
+                line = s.__str__() + "\t"
+            for metric in ap.params["metrics"]:
+                line += "%.3f"%data[metric][s] + "\t"
+            for metric in ap.params["metrics"]:
+                line += metric_site_rank[metric][s].__str__() + "\t"
+            if msapaths.__len__() > 1:
+                for m in msapaths:
+                    for metric in ap.params["metrics"]:
                         if s in ap.params["msa_refsite2mysite"][m]:
                             mys = ap.params["msa_refsite2mysite"][m][s]
-                            line += "%.3f"%msa_scores[m][mys] + "\t"
-                        else:
-                            line += "\t"
-                line += "\n"
-                fout.write(line)
-        fout.close()
+                            line += "%.3f"%msa_scores[metric][m][mys] + "\t"
+                    else:
+                        line += "---\t"
+            line += "\n"
+            fout.write(line)
+    fout.close()
 
-def rank_and_correlate(metric_data, metric_blendeddata):
-    cranpaths = [] # a list of R scripts that will be executed.
+def rank_all(metric_data, metric_blendeddata):
     metric_ranked = {}
     for i in ap.params["metrics"]:
         print "\n. I'm ranking the data for", i, "from across all the alignments."
         metric_ranked[i] = rank_sites(metric_blendeddata[i], metric_data[i], method=i)
-
+    return metric_ranked
+        
+def correlate_all(metric_ranked, metric_blendeddata):
+    cranpaths = [] # a list of R scripts that will be executed.
     if False == ap.doesContainArg("--skip_correlation"):
         if ap.params["metrics"].__len__() > 1:
             metric_comparisons = []
             for i in range(0, ap.params["metrics"].__len__()):
                 for j in range(i, ap.params["metrics"].__len__()):
-                    metric_comparisons.append( (ap.params["metrics"][i], ap.params["metrics"][j]) )
+                    if i != j:
+                        metric_comparisons.append( (ap.params["metrics"][i], ap.params["metrics"][j]) )
             for comparison in metric_comparisons:
                 this_metric = comparison[0]
                 that_metric = comparison[1]
-                for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric):
+                for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric, xunit=this_metric, yunit=that_metric):
                     cranpaths.append( cranpath )
     return cranpaths
 
@@ -1168,7 +1341,14 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 lout = "--> "
                 lout += " " + method + " = %.3f"%h
                 lout += " rank: " + (i+1).__str__()
+                #print ap.params["msa_mysite2seedsite"]
+                #exit()
+                lout += " seed site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()              
                 lout += "\n" 
+                left = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-1]
+                here = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
+                right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite+1]
+                lout += "\tseed context: " + left + here + right + "\n"
                 for msa in ap.params["msa_comparisons"]:
                     if refsite in ap.params["msa_refsite2mysite"][msa]:
                         mys = ap.params["msa_refsite2mysite"][msa][refsite]
@@ -1183,7 +1363,7 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 fout.write(lout)
         fout.close()
 
-    ranked_sites = [] # array of tuples, (refsite, value for this site)
+    ranked_sites = [] # array of tuples in order, (refsite, value for this site)
     for i in range(0, hscores.__len__()):
         h = hscores[i]
         for refsite in score_refsites[h]:
@@ -1288,19 +1468,20 @@ def plot_histogram(metric_data):
         for site in data:
             this_bin = get_bin( data[site], bins )
             #print "901:", data[site], this_bin
-            metric_bin_count[metric][this_bin] += 1.0/n
+            metric_bin_count[metric][this_bin] += 1.0
         
         """
         Write the R script.
         """        
         pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
-        cranstr = "pdf(\"" + pdfpath + "\", width=8, height=2.5);\n"    
+        cranstr = "pdf(\"" + pdfpath + "\", width=4, height=4);\n"    
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
         for bin in bins:
-            if metric_bin_count[metric][bin] == 0.0:
-                metric_bin_count[metric][bin] = 0.5 / metric_data[metric].__len__() 
+            if ap.doesContainArg("--plot_histogram_log_axis"):
+                if metric_bin_count[metric][bin] == 0.0:
+                    metric_bin_count[metric][bin] = 0.5 / metric_data[metric].__len__() 
             cranstr += metric_bin_count[metric][bin].__str__() + ","
         cranstr = re.sub(",$", "", cranstr)
         cranstr += ")\n"
@@ -1311,7 +1492,10 @@ def plot_histogram(metric_data):
         cranstr = re.sub(",$", "", cranstr)
         cranstr += ");\n"
     
-        cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, log='y', col=c(\"blue\"), names.arg=bins);\n"
+        if ap.doesContainArg("--plot_histogram_log_axis"): # make the Y axis log, or not?
+            cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, log='y', col=c(\"blue\"), names.arg=bins);\n"
+        else:
+            cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, ylim=range(0,20), col=c(\"black\"), names.arg=bins);\n"
     
 #        avg = mean(allvalues)
 #        stdev = sd(allvalues)
@@ -1331,7 +1515,7 @@ def plot_histogram(metric_data):
 
 
 
-def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):    
+def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=None):    
     cranpaths = []
     
     if  ma.__len__() != mb.__len__():
@@ -1342,10 +1526,11 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
     rank_a_b = [] # array of triples (A val, B val, mark)
     count_skipped = 0
     for i in range(0, ma.__len__()):
-        maval = ma[i][1]
-        mbval = mb[i][1]
         hsite = ma[i][0]
         psite = mb[i][0]
+        maval = ma[i][1]
+        mbval = mb[i][1]
+
         hrank = i+1-count_skipped
         prank = 0
         for j in range(0, mb.__len__()):
@@ -1361,13 +1546,13 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
         if maval == 0.0 and mbval == 0.0:
             mark = 0
         rank_a_b.append( (hrank, prank, mark) )
-    spearmans =  ss.spearmanr(ma_ranked, mb_ranked)[0]
-    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue" )
+    spearmans =  ss.spearmanr(ma_ranked, mb_ranked)
+    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]))
     #os.system("r --no-save < " + path)
     cranpaths.append( path )
 
     fout = open( get_plot_outpath(ap, tag="corr-rank." + tag) + ".txt" , "w")
-    fout.write( spearmans.__str__() + "\n")
+    fout.write( spearmans[0].__str__() + "\n")
     for v in rank_a_b:
         fout.write( v[0].__str__() + "\t" + v[1].__str__() + "\n")
     fout.close()
@@ -1385,12 +1570,14 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
         mavals.append(maval)
         mbvals.append(mbval)
     pearsons = ss.pearsonr(mavals, mbvals)
-    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "green" )
+    pearsonsT = pearsons[0]
+    pearsonsP = pearsons[1]
+    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "darkgreen", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT) )
     #os.system("r --no-save < " + path)
     cranpaths.append( path )
     
     fout = open( get_plot_outpath(ap, tag="corr-value." + tag) + ".txt" , "w")
-    fout.write( pearsons.__str__() + "\n")
+    fout.write( pearsonsT.__str__() + "\n")
     for v in value_a_b:
         fout.write( v[0].__str__() + "\t" + v[1].__str__() + "\n")
     fout.close()
@@ -1398,7 +1585,7 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag):
     return cranpaths
     #return [spearmans, pearsons]
     
-def plot_correlation(data, outpath, title, color):
+def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=None):
     cranpath = outpath + ".rscript"
     cranout = open(cranpath, "w")
     miny = 0.0
@@ -1445,7 +1632,10 @@ def plot_correlation(data, outpath, title, color):
     cranout.write( colors + "\n")
         
     cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
-    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='hvals', ylab='', main='" + title + "', lwd=2, col='" + color + "');\n")
+    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab=\"" + xlab + "\", ylab=\"" + ylab + "\", main='" + title + "', lwd=2, col='" + color + "');\n")
+    if memo != None:
+        textx = minx + 0.2*(maxx-minx)
+        cranout.write( "text(" + textx.__str__() + "," + maxy.__str__() + ",\"" + memo + "\");\n")
     cranout.write("points(x, y, lwd=2, type='p', col=colors, pch=m);\n")
     cranout.write("dev.off();\n")
     cranout.close()
@@ -1482,6 +1672,9 @@ def smooth_data(metric_blendeddata):
                 fout.write(metric + "\t %.3f"%mean_val + "\t %.3f"%sdev + "\n")
             fout.close()
     
+        #
+        # Plot the site-by-metric for each metric
+        #
         for metric in ap.params["metrics"]:
             # Plot the data for each site. . .
             plot_outpath = get_plot_outpath(ap, tag=(metric + "-by-site.w=" + w.__str__()) )
@@ -1489,6 +1682,14 @@ def smooth_data(metric_blendeddata):
             if False != ap.getOptionalArg("--combo_method"):
                 combo_substring = ", " + ap.getOptionalArg("--combo_method")
             plot_title = metric + " score, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
-            cranpath = plot( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "blue")
+            cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black")
             cranpaths.append(cranpath)  
+        
+        #
+        # Plot the site-by-metric, normalized, for all metrics on one plot.
+        #
+        multi_plot_outpath = get_plot_outpath(ap, tag=("all-by-site.w=" + w.__str__()) )
+        plot_title = "All metrics, normalized, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
+        cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title)
+        cranpaths.append(cranpath)
     return cranpaths
