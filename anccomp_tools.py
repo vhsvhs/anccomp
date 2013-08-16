@@ -18,6 +18,8 @@ METRIC_WT["p"] = "1.0"
 PDIST_WEIGHT = 1.0
 KDIST_WEIGHT = 1.0
 
+
+
 # set is an array of floats
 def mean(set):
     if set.__len__() == 0:
@@ -50,6 +52,13 @@ def var(set):
 def stderr(set):
     return (sd(set) / math.sqrt( set.__len__() ) )
 
+
+def roundup(x, step):
+    """Roundup x to the nearest 100"""
+    if x > 0:
+        return int(math.ceil(x / (1.0*step))) * step
+    else:
+        return (int(math.ceil(x / (1.0*step))) * step) - step
 
 #####################################################################
 
@@ -1020,6 +1029,7 @@ def plot_one_metric(data, outpath, title, ylab, color):
     if ap.doesContainArg("--renumber_sites"):
         minx = 1
         maxx = sites.__len__()
+
     
     for s in sites:
         yval = 0
@@ -1053,14 +1063,43 @@ def plot_one_metric(data, outpath, title, ylab, color):
     y += ")"
     cranout.write( y + "\n")
         
-    cranout.write("pdf('" + outpath + ".pdf', width=8, height=2.5);\n")
-    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, col='" + color + "');\n")
-    cranout.write("points(x, y, lwd=2, type='l', col='" + color + "');\n")
+    cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
+    cranout.write("plot(c(" + minx.__str__() + "," + roundup(maxx, 100).__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='Sites homologous to " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, las=1, col='" + color + "', bty='n');\n")
+    
+    # insert any rectangles here, for highlighted sites
+    highlight_sites = ap.getOptionalList("--highlight_sites")
+    if highlight_sites != None:
+        print "1062:", highlight_sites
+        for pair in highlight_sites:
+            tokens = pair.split("-")
+            cranout.write("rect(" + tokens[0].__str__() + ", " + miny.__str__() + " , " +  tokens[1].__str__()+ ", " + maxy.__str__() + ", col=\"gray92\", lwd=0, lty=\"blank\");\n")
+    
+    # draw lines for 0, +/- 2 stdev, and +/- 4 stdev
     sdev = sd(allvalues)
-    cranout.write("abline(" + (2*sdev).__str__() + ",0, lwd=0.5, col='darkgreen');\n")
-    cranout.write("abline(" + (4*sdev).__str__() + ",0, lwd=0.5, col='lightgreen');\n")
-    cranout.write("abline(" + (-2*sdev).__str__() + ",0, lwd=0.5, col='darkgreen');\n")
-    cranout.write("abline(" + (-4*sdev).__str__() + ",0, lwd=0.5, col='lightgreen');\n")
+    avg = mean(allvalues)
+    cranout.write("abline(0,0, lwd=0.75, col='black');\n")
+    cranout.write("abline(" + avg.__str__() + ",0, lwd=0.5, lty='dashed', col='gray50');\n")
+    cranout.write("abline(" + (avg+2*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='deepskyblue2');\n")
+    cranout.write("abline(" + (avg-2*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='deepskyblue2');\n")
+    cranout.write("abline(" + (avg+4*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='orange1');\n")
+    cranout.write("abline(" + (avg-4*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='orange1');\n")
+    cranout.write("abline(" + (avg-6*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='red1');\n")
+    cranout.write("abline(" + (avg+6*sdev).__str__() + ",0, lwd=0.5, lty='dashed', col='red1');\n")
+
+
+    # draw text for stdev lines.
+    cranout.write("text(" + maxx.__str__() + "," + (avg).__str__() + ", \"mean\", cex=0.7, col='gray50');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg+2*sdev).__str__() + ", \"+2 sigma\", cex=0.7, col='deepskyblue2');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg-2*sdev).__str__() + ", \"-2 sigma\", cex=0.7, col='deepskyblue2');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg+4*sdev).__str__() + ", \"+4 sigma\", cex=0.7, col='orange1');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg-4*sdev).__str__() + ", \"-4 sigma\", cex=0.7, col='orange1');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg+6*sdev).__str__() + ", \"+6 sigma\", cex=0.7, col='red1');\n")
+    cranout.write("text(" + maxx.__str__() + "," + (avg-6*sdev).__str__() + ", \"-6 sigma\", cex=0.7, col='red1');\n")
+    
+    
+    # draw the data
+    cranout.write("points(x, y, lwd=2, type='l', col='" + color + "');\n")
+    
     cranout.write("dev.off();\n")
     cranout.close()
     return cranpath
@@ -1274,8 +1313,8 @@ def write_summary_table(data, msa_scores, metric_ranked):
                         if s in ap.params["msa_refsite2mysite"][m]:
                             mys = ap.params["msa_refsite2mysite"][m][s]
                             line += "%.3f"%msa_scores[metric][m][mys] + "\t"
-                    else:
-                        line += "---\t"
+                        else:
+                            line += "---\t"
             line += "\n"
             fout.write(line)
     fout.close()
@@ -1406,7 +1445,6 @@ def get_bin(value, bins):
 
 def plot_histogram(metric_data):
     cranpaths = []
-    metric_bin_count = {}
     for metric in metric_data:
         maxx = None
         minx = None
@@ -1459,51 +1497,101 @@ def plot_histogram(metric_data):
         #print "1111:"
         bins = get_bins(minx, maxx, binwidth)
         #print "1113"
-        metric_bin_count[metric] = {}
+        bin_count= {}
         for b in bins:
-            metric_bin_count[metric][b] = 0.0
+            bin_count[b] = 0.0
         
         data = metric_data[metric]
         n = data.__len__()
         for site in data:
             this_bin = get_bin( data[site], bins )
             #print "901:", data[site], this_bin
-            metric_bin_count[metric][this_bin] += 1.0
+            if bin_count[this_bin] < 20:
+                bin_count[this_bin] += 1.0
         
         """
         Write the R script.
         """        
         pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
-        cranstr = "pdf(\"" + pdfpath + "\", width=4, height=4);\n"    
+        cranstr = "pdf(\"" + pdfpath + "\", width=5, height=4);\n"    
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
         for bin in bins:
             if ap.doesContainArg("--plot_histogram_log_axis"):
-                if metric_bin_count[metric][bin] == 0.0:
-                    metric_bin_count[metric][bin] = 0.5 / metric_data[metric].__len__() 
-            cranstr += metric_bin_count[metric][bin].__str__() + ","
+                if bin_count[bin] == 0.0:
+                    bin_count[bin] = 0.5 / metric_data[metric].__len__() 
+            cranstr += bin_count[bin].__str__() + ","
         cranstr = re.sub(",$", "", cranstr)
         cranstr += ")\n"
+
+        sdev = sd(allvalues)
+        avg = mean(allvalues)
     
         cranstr += "bins <- c("
-        for bin in bins:
-            cranstr += bin.__str__() + ","
         cranstr = re.sub(",$", "", cranstr)
         cranstr += ");\n"
+
+        # New style, drawing each bar with rect()
+        xmax = roundup(maxx, 1.0)
+        xmin = roundup(minx, 1.0)
+        cranstr += "plot(c(" + roundup(xmin,2.0).__str__() + "," + roundup(xmax, 2.0).__str__() + "), c(0,20), type='n',xlab='" + metric + " score', ylab='N sites', main='" + metric + " histogram " + time.asctime().__str__() + "',lwd=2, las=1, col='black', bty='n');\n"
+        for bin in bins:
+            colstr = ""
+            if bin < avg:
+                if bin <= avg - 6*sdev:
+                    colstr = "red1"
+                elif bin <= avg - 4*sdev:
+                    colstr = "orange1"
+                elif bin <= avg - 2*sdev:
+                    colstr = "deepskyblue2"
+                else:
+                    colstr = "black" 
+            elif bin > avg:
+                if bin >= avg + 6*sdev:
+                    colstr = "red1"
+                elif bin >= avg + 4*sdev:
+                    colstr = "orange1"
+                elif bin >= avg + 2*sdev:
+                    colstr = "deepskyblue2"
+                else:
+                    colstr = "black" 
+            cranstr += "rect(" + bin.__str__() + ", 0.0, " + (bin+binwidth).__str__() + ", " + bin_count[bin].__str__() + ", col=\"" + colstr + "\", lwd=0.1);\n"
+
+        # depricated
+        #cranstr += "par(lwd = 0.1);\n"   
+        #if ap.doesContainArg("--plot_histogram_log_axis"): # make the Y axis log, or not?
+        #    cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", ylab=\"N sites\", beside=TRUE, log='y', l col=bincolors, las=1, names.arg=bins);\n"
+        #else:
+        #    cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", ylab=\"N sites\", beside=TRUE, ylim=range(0,20), col=bincolors, las=1, names.arg=bins);\n"
     
-        if ap.doesContainArg("--plot_histogram_log_axis"): # make the Y axis log, or not?
-            cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, log='y', col=c(\"blue\"), names.arg=bins);\n"
-        else:
-            cranstr += "barx = barplot(as.matrix("+ metric + "), xlab=\"" + metric + "\", beside=TRUE, ylim=range(0,20), col=c(\"black\"), names.arg=bins);\n"
+#        # draw lines for 0, +/- 2 stdev, and +/- 4 stdev
+
+        cranstr += "abline(0,0, lwd=0.75, col='black');\n"
+        cranstr += "abline(v=" + avg.__str__() + ", lwd=0.5, lty='dashed', col='gray50');\n"
+        if roundup(xmax,2.0) > (avg+2*sdev):
+            cranstr += "abline(v=" + (avg+2*sdev).__str__() + ", lwd=0.5, lty='dashed', col='deepskyblue2');\n"
+            cranstr += "text(" + (avg+2*sdev).__str__() + ", 20, \"+2 sigma\", cex=0.5, col='deepskyblue2');\n"
+        if roundup(xmin,2.0) < (avg-2*sdev):
+            cranstr += "abline(v=" + (avg-2*sdev).__str__() + ", lwd=0.5, lty='dashed', col='deepskyblue2');\n"
+            cranstr += "text(" + (avg-2*sdev).__str__() + ", 20, \"-2 sigma\", cex=0.5, col='deepskyblue2');\n"
+        if roundup(xmax,2.0) > (avg+4*sdev):
+            cranstr += "abline(v=" + (avg+4*sdev).__str__() + ", lwd=0.5, lty='dashed', col='orange1');\n"
+            cranstr += "text(" + (avg+4*sdev).__str__() + ", 20, \"+4 sigma\", cex=0.5, col='orange1');\n"
+        if roundup(xmin,2.0) < (avg-4*sdev):
+            cranstr += "abline(v=" + (avg-4*sdev).__str__() + ", lwd=0.5, lty='dashed', col='orange1');\n"
+            cranstr += "text(" + (avg-4*sdev).__str__() + ", 20, \"-4 sigma\", cex=0.5, col='orange1');\n"
+        if roundup(xmax,2.0) > (avg+6*sdev):
+            cranstr += "abline(v=" + (avg+6*sdev).__str__() + ", lwd=0.5, lty='dashed', col='red1');\n"
+            cranstr += "text(" + (avg+6*sdev).__str__() + ", 20, \"+6 sigma\", cex=0.5, col='red1');\n"
+        if roundup(xmin,2.0) < (avg-6*sdev):
+            cranstr += "abline(v=" + (avg-6*sdev).__str__() + ", lwd=0.5, lty='dashed', col='red1');\n"
+            cranstr += "text(" + (avg-6*sdev).__str__() + ", 20, \"-6 sigma\", cex=0.5, col='red1');\n"
     
-#        avg = mean(allvalues)
-#        stdev = sd(allvalues)
-#        cranstr += "abline(v=" + avg.__str__() + ", lty=2,lwd=2)\n"
-#        cranstr += "abline(v=" + (avg-stdev).__str__() + ", lty=3,lwd=1)\n"
-#        cranstr += "abline(v=" + (avg+stdev).__str__() + ", lty=3,lwd=1)\n"
-#        cranstr += "abline(v=" + (avg-(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
-#        cranstr += "abline(v=" + (avg+(2*stdev)).__str__() + ", lty=3,lwd=1)\n"
+        # draw text for stdev lines.
+        cranstr += "text(" + (avg).__str__() + ", 20, \"mean\", cex=0.5, col='gray50');\n"
+
+        cranstr += "dev.off();\n"
     
         cranpath = get_plot_outpath(ap, tag=metric + "-histogram.rscript")
         fout = open(cranpath, "w")
@@ -1572,7 +1660,7 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
     pearsons = ss.pearsonr(mavals, mbvals)
     pearsonsT = pearsons[0]
     pearsonsP = pearsons[1]
-    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "darkgreen", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT) )
+    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT) )
     #os.system("r --no-save < " + path)
     cranpaths.append( path )
     
@@ -1632,7 +1720,7 @@ def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=Non
     cranout.write( colors + "\n")
         
     cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
-    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab=\"" + xlab + "\", ylab=\"" + ylab + "\", main='" + title + "', lwd=2, col='" + color + "');\n")
+    cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab=\"" + xlab + "\", ylab=\"" + ylab + "\", main='" + title + "', lwd=2, col='" + color + "', bty='n');\n")
     if memo != None:
         textx = minx + 0.2*(maxx-minx)
         cranout.write( "text(" + textx.__str__() + "," + maxy.__str__() + ",\"" + memo + "\");\n")

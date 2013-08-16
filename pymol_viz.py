@@ -74,32 +74,54 @@ def do_pymol_viz(ap, mb, seedseq):
         
         maxh = data[data.keys()[0]]
         minh = data[data.keys()[0]]
+        allvals = []
         for site in data:
+            allvals.append( data[site] )
             if maxh < data[site]:
                 maxh = data[site]
             if minh > data[site]:
                 minh = data[site]
         
+        red = "[255,0,0]"
+        orange = "[255,165,0]"
+        blue = "[0,178,238]"
+        snow = "[255,250,250]"
+        
+        sdev = sd(allvals)
+        avg = mean(allvals)
+        
         while (ref_site < seedseq.__len__() ):
             if seedseq[ref_site] != "-":
                 if ref_site in data:
                     h = data[ref_site]
-                    if h > 0:
-                        red = 1.0#0.9 + (h/maxh)*0.1
-                        green = 1.0 - (h/maxh)#0.9 + (h/maxh)*0.1
-                        blue = 1.0 - (h/maxh)
-                    if h < 0:
-                        blue = 1.0#0.9 + (h/minh)*0.1
-                        green = 1.0 - (h/minh)#0.9 + (h/minh)*0.1
-                        red = 1.0 - (h/minh)
-                    if h == 0:
-                        blue = 1.0#0.9
-                        green = 1.0#0.9
-                        red = 1.0#0.9
+
+                    if h < avg:
+                        if h <= avg - 6*sdev:
+                            this_color = red
+                        elif h <= avg - 4*sdev:
+                            this_color =  orange
+                        elif h <= avg - 2*sdev:
+                            this_color = blue
+                        else:
+                            this_color = snow 
+                    elif h > avg:
+                        if h >= avg + 6*sdev:
+                            this_color = red
+                        elif h >= avg + 4*sdev:
+                            this_color = orange
+                        elif h >= avg + 2*sdev:
+                            this_color = blue
+                        else:
+                            this_color = snow 
+
                     #print ref_site, seedseq[ref_site], h, blue, green, red
-                    this_color = "[" + red.__str__() + "," + green.__str__() + "," + blue.__str__() + "]"
+                    #this_color = "[" + red.__str__() + "," + green.__str__() + "," + blue.__str__() + "]"
                     outlines += "cmd.set_color('color" + pdb_site.__str__() + "'," + this_color + ")\n"
                     outlines += "cmd.color(\"color" + pdb_site.__str__() + "\", \"resi " + pdb_site.__str__() + "\")\n"
+                else:
+                    this_color = snow
+                    outlines += "cmd.set_color('color" + pdb_site.__str__() + "'," + this_color + ")\n"
+                    outlines += "cmd.color(\"color" + pdb_site.__str__() + "\", \"resi " + pdb_site.__str__() + "\")\n"                    
                 pdb_site += 1
             ref_site += 1
                 
