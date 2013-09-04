@@ -125,7 +125,7 @@ Now execute all the R scripts.
 if False == ap.getOptionalToggle("--skip_plots"):
     for c in cranpaths:
         print "\n. I'm plotting results, using the R script written at [", c, "] . . ."
-        os.system("r --no-save < " + c)
+        os.system("/usr/bin/Rscript " + c)
 else:
     print "\n. I'm skipping the result plots."
     print ". You can build these plots later by invoking the following R scripts:"
@@ -148,5 +148,5 @@ if False != ap.getOptionalArg("--pdb_path"):
 #write_html_summary(ap)
 
 
-print "\n\n. Finished.  Results were written to the folder", get_plot_outpath(ap)
+print "\n\n. I'm finished.  The results were written to the folder", get_plot_outpath(ap)
 print "\n. Goodbye."

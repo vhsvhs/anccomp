@@ -313,7 +313,7 @@ def align_msas():
         if len > longest_len:
             longest_len = len
             longest_msa = p
-        print "\n. Alignment", p, "has", int(len), "sites."
+        print "\n. Alignment", ap.params["msa_path2nick"][p], "has", int(len), "sites."
     ap.params["longest_msa"] = longest_msa
     
     if msapaths.__len__() > 1:
@@ -338,7 +338,7 @@ def align_msas():
     for p in msapaths:            
         nick = ap.params["msa_path2nick"][p]
         if p != longest_msa:
-            print "\n. . .I'm Aligning ", p, " to ", longest_msa, ""
+            print "\n. . .I'm Aligning ", nick, " to ", ap.params["msa_path2nick"][longest_msa], ""
         ap.params["msa_refsite2mysite"][nick] = {}
         ap.params["msa_mysite2refsite"][nick] = {}
         ref_site = 1

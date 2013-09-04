@@ -163,4 +163,4 @@ def do_pymol_viz(ap, mb):
             fout.write("cmd.color(\"" + this_color + "\", \"resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n") 
         fout.close()
         
-        print "\n\n. Run the script at " + os.getcwd() + "/" + scriptpath
+        print "\n\n. Load PyMol and run the following script: " + os.getcwd() + "/" + scriptpath
