@@ -1,4 +1,4 @@
-VERSION = "July 26, 2013"
+VERSION = "September 4, 2013"
 
 def show_splash():
     print "========================================================="

@@ -138,7 +138,15 @@ else:
 #If specified, visualize H scores on PyMol structure...
 #"""
 if False != ap.getOptionalArg("--pdb_path"):
-    do_pymol_viz(ap, metric_blendeddata, ap.params["msa_seedseq"][ap.params["longest_msa"]])
+    #refseq = # the ML sequence of the ancestor
+    # ap.params["msa_seedseq"][ap.params["longest_msa"]
+    # ap.params["msa_comparisons"][lnick][1]
+    
+    do_pymol_viz(ap, metric_blendeddata)
+
+
+#write_html_summary(ap)
+
 
 print "\n\n. Finished.  Results were written to the folder", get_plot_outpath(ap)
 print "\n. Goodbye."

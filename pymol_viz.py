@@ -1,6 +1,11 @@
 from config import *
 from anccomp_tools import *
 
+from smith_waterman import *
+
+#
+# The PyMol visualization requires that you have pdb-tools (i.e. Mike Harm's tools).
+#
 PDBTOOLSDIR = ap.getOptionalArg("--pdbtoolsdir")
 PDBSEQ = "python " + PDBTOOLSDIR + "/pdb_seq.py"
 
@@ -21,56 +26,89 @@ def get_seq_from_pdb(pdbpath):
 
 
 def get_pdb_startsite(pdb_seq, seed_seq):
-    j = 0
     for i in range(0, seed_seq.__len__()):
         seed_seq_no_indels = re.sub("-", "", seed_seq[i:])
-        if seed_seq_no_indels.startswith(pdb_seq[0:20]):
-            return i
+        if seed_seq_no_indels.startswith(pdb_seq[0:10]):
+            n = 11
+            while n < pdb_seq.__len__():
+                #print n
+                if seed_seq_no_indels.startswith(pdb_seq[0:n]):
+                    n += 1
+                else:
+                    return (i,n)
+            return (i,n)
+    return (-1,-1)
+
 
 def get_pdb_offset(pdb_path):
+    """What is the first site number in the protein sequence in the PDB?"""
     fin = open(pdb_path, "r")
     for l in fin.xreadlines():
         if l.startswith("ATOM"):
-            site = int(l.split()[5])
+            site = int(l.split()[4])
             return site
     fin.close()
     return 1
 
+def get_pdb_sites(pdb_path):
+    """Returns a sorted list with the site numbers in the PDB."""
+    sites = []
+    fin = open(pdb_path, "r")
+    for l in fin.xreadlines():
+        if l.startswith("ATOM"):
+            site = int(l.split()[4])
+            if site not in sites:
+                sites.append(site)
+    fin.close()
+    return sites    
+
+
 def pymol_viz_helper(ap, data, seedseq):
     pass
 
-def do_pymol_viz(ap, mb, seedseq):
+def do_pymol_viz(ap, mb):    
     if PDBTOOLSDIR == False:
         print "\n. Sorry, but you need pdb-tools installed in order to analyze your PDB file."
         return
-    pdb_path = ap.getOptionalArg("--pdb_path")
-    #ref_site = int(ap.getOptionalArg("--pdb_starts_at"))
-    #if ref_site == False:
-    #    print "\n. You need to specify --pdb_starts_at"
-    #    exit()
-    print "\n. Plotting data on the PDB file", pdb_path
     
+    # Get the PDB sequence:
+    pdb_path = ap.getOptionalArg("--pdb_path")
+    print "\n. I'm plotting scores onto the PDB file", pdb_path
     pdb_seq = get_seq_from_pdb(pdb_path)
-    print pdb_seq
+    #print "\n. The PDB sequence is:\n", pdb_seq
+
+    
+    # Does the PDB sequence match the seed sequence?
     lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-    seed_seq = get_seed_seq(  ap.params["msa_nick2path"][lnick], ap.params["seed"]  )
-    ref_site = get_pdb_startsite(pdb_seq, seed_seq)
-    pdb_offset = get_pdb_offset(pdb_path)
-    #print "50:"
-    #print pdb_seq[0:10]
-    #print seed_seq[ref_site:(ref_site+10)]
+    this_seq = dat2seq( ap.params["msa_comparisons"][lnick][1] )
+    (this_identity, this_score, this_align1, this_align2, this_symbol) = needle(this_seq, pdb_seq)
+    #if this_identity > identity: # this sequence is a better match
+    seq = this_seq
+    #identity = this_identity
+    #score = this_score
+    align1 = this_align1
+    align2 = this_align2
+    #symbol = this_symbol
+    
+    pdbsites = get_pdb_sites(pdb_path)
+    
+    pdbseqsite2structsite = {}
+    pdbseqsite2refsite = {} # key = 1-based pdb site number, value = 1-based ref site number
+    pdbsite = 0    # sites in the PDB (may not be continuous)
+    pdbseqsite = 0 # sites in the sequence array
+    for i in range(0, align2.__len__()):
+        if align2[i] != "-":
+            structsite = pdbsites[ pdbseqsite ]
+            pdbseqsite2structsite[pdbseqsite] = structsite
+            #print i+1, structsite, pdb_seq[ pdbseqsite ], seq[i]
+            pdbseqsite2refsite[ pdbseqsite ] = i
+            pdbseqsite += 1
     
     for metric in mb:
         data = mb[metric]
-        #print data
-        #print seedseq
-        #print seedseq.__len__()
-        
         outlines = ""
-        outlines += "cmd.load(\"" + pdb_path + "\")\n"
-        #outlines += "select all\n"
-        #outlines += "color white\n"
-        pdb_site = pdb_offset-1
+        outlines += "cmd.load(\"" + os.path.abspath(pdb_path) + "\")\n"
+        #pdb_site = pdb_offset-1
         
         maxh = data[data.keys()[0]]
         minh = data[data.keys()[0]]
@@ -82,52 +120,47 @@ def do_pymol_viz(ap, mb, seedseq):
             if minh > data[site]:
                 minh = data[site]
         
-        red = "[255,0,0]"
-        orange = "[255,165,0]"
-        blue = "[0,178,238]"
-        snow = "[255,250,250]"
+        red = "red"
+        orange = "orange"
+        blue = "blue"
+        snow = "white"
         
         sdev = sd(allvals)
         avg = mean(allvals)
-        
-        while (ref_site < seedseq.__len__() ):
-            if seedseq[ref_site] != "-":
-                if ref_site in data:
-                    h = data[ref_site]
 
-                    if h < avg:
-                        if h <= avg - 6*sdev:
-                            this_color = red
-                        elif h <= avg - 4*sdev:
-                            this_color =  orange
-                        elif h <= avg - 2*sdev:
-                            this_color = blue
-                        else:
-                            this_color = snow 
-                    elif h > avg:
-                        if h >= avg + 6*sdev:
-                            this_color = red
-                        elif h >= avg + 4*sdev:
-                            this_color = orange
-                        elif h >= avg + 2*sdev:
-                            this_color = blue
-                        else:
-                            this_color = snow 
-
-                    #print ref_site, seedseq[ref_site], h, blue, green, red
-                    #this_color = "[" + red.__str__() + "," + green.__str__() + "," + blue.__str__() + "]"
-                    outlines += "cmd.set_color('color" + pdb_site.__str__() + "'," + this_color + ")\n"
-                    outlines += "cmd.color(\"color" + pdb_site.__str__() + "\", \"resi " + pdb_site.__str__() + "\")\n"
-                else:
-                    this_color = snow
-                    outlines += "cmd.set_color('color" + pdb_site.__str__() + "'," + this_color + ")\n"
-                    outlines += "cmd.color(\"color" + pdb_site.__str__() + "\", \"resi " + pdb_site.__str__() + "\")\n"                    
-                pdb_site += 1
-            ref_site += 1
-                
         scriptpath = "pymol_script." + metric + ".p"
         fout = open(scriptpath, "w")
-        fout.write(outlines)
+        fout.write("cmd.load(\"" + os.path.abspath(pdb_path) + "\")\n")
+        
+        pdbsites = pdbseqsite2refsite.keys()
+        pdbsites.sort()
+        for site in pdbsites:
+            refsite = pdbseqsite2refsite[site] # get the reference site for this PDB site
+            if (refsite+1) in data:
+                h = data[refsite+1]
+                if h < avg:
+                    if h <= avg - 6*sdev:
+                        this_color = red
+                    elif h <= avg - 4*sdev:
+                        this_color =  orange
+                    elif h <= avg - 2*sdev:
+                        this_color = blue
+                    else:
+                        this_color = snow 
+                elif h > avg:
+                    if h >= avg + 6*sdev:
+                        this_color = red
+                    elif h >= avg + 4*sdev:
+                        this_color = orange
+                    elif h >= avg + 2*sdev:
+                        this_color = blue
+                    else:
+                        this_color = snow                                
+            else:
+                this_color = snow
+            # Here we do +1 because 'site' is 0-based, whereas the PDB is 1-based
+            #print ". Site", refsite+1, seq[refsite], pdbseqsite2structsite[site], pdb_seq[site], this_color 
+            fout.write("cmd.color(\"" + this_color + "\", \"resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n") 
         fout.close()
         
         print "\n\n. Run the script at " + os.getcwd() + "/" + scriptpath

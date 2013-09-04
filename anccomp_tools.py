@@ -277,6 +277,7 @@ def get_msa_len(p):
     return float(lines[0].strip().split()[1])
 
 def get_seed_seq(msapath, seed):
+    """Returns the seed sequence, with gaps."""
     seed_seq = ""
     fin = open(msapath, "r")
     for l in fin.readlines():
@@ -337,7 +338,7 @@ def align_msas():
     for p in msapaths:            
         nick = ap.params["msa_path2nick"][p]
         if p != longest_msa:
-            print "\n. Aligning ", p, " to ", longest_msa, ""
+            print "\n. . .I'm Aligning ", p, " to ", longest_msa, ""
         ap.params["msa_refsite2mysite"][nick] = {}
         ap.params["msa_mysite2refsite"][nick] = {}
         ref_site = 1
@@ -573,13 +574,28 @@ def dat2pp(datpath):
     return data
 
 
+def dat2seq(datpath, remove_indels=False):
+    """Returns the ML sequence from an ancestral *.dat file."""
+    fin = open(datpath, "r")
+    lines = fin.readlines()
+    fin.close()
+    mlseq = ""
+    for l in lines:
+        if l.__len__() > 2:
+            tokens = l.split()
+            state = tokens[1]
+            if (remove_indels == False) or (remove_indels == True and state != "-"):
+                mlseq += tokens[1] 
+    return mlseq
+
+
 def compare_ancestors():
     msa_changes = {} # key = msa nickname, value = output from the method 'count_changes_between_ancestors'
     metric_data = {}
     for msanick in ap.params["msa_nick2path"]:
         this_ancpath = ap.params["msa_comparisons"][msanick][0]
         that_ancpath = ap.params["msa_comparisons"][msanick][1]
-        print "\n. I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
+        print "\n. . .I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
     
         # Compare the ancestors in simple terms, by the number of amino acid changes and the number of indel changes, etc.
         msa_changes[msanick] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
@@ -1069,7 +1085,7 @@ def plot_one_metric(data, outpath, title, ylab, color):
     # insert any rectangles here, for highlighted sites
     highlight_sites = ap.getOptionalList("--highlight_sites")
     if highlight_sites != None:
-        print "1062:", highlight_sites
+        print "\n. For visualization, I will highlight the sites in the range", highlight_sites
         for pair in highlight_sites:
             tokens = pair.split("-")
             cranout.write("rect(" + tokens[0].__str__() + ", " + miny.__str__() + " , " +  tokens[1].__str__()+ ", " + maxy.__str__() + ", col=\"gray92\", lwd=0, lty=\"blank\");\n")
@@ -1374,6 +1390,7 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
         
     if writetable == True:
         fout = open( get_table_outpath(ap, tag=method+".ranked.txt"), "w")
+        outlines = []
         for i in range(0, hscores.__len__()):
             h = hscores[i]
             for refsite in score_refsites[h]:
@@ -1384,9 +1401,19 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 #exit()
                 lout += " seed site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()              
                 lout += "\n" 
-                left = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-1]
-                here = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
-                right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite+1]
+                header_lout = ""
+                header_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
+                header_lout += "\tk= " + "%.3f"%h
+                header_lout += "\trank: " + (i+1).__str__()
+                fout.write(header_lout + "\n")
+                
+                #print "1395:", refsite, ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__()
+                left = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-2]
+                here = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-1]
+                if refsite < ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__():
+                    right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
+                else:
+                    right = "-"
                 lout += "\tseed context: " + left + here + right + "\n"
                 for msa in ap.params["msa_comparisons"]:
                     if refsite in ap.params["msa_refsite2mysite"][msa]:
@@ -1399,7 +1426,9 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                             if l.startswith(mys.__str__() + " "):
                                 lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][1]) + "\tsite " + re.sub("site ", "", l)
                 lout += "\n"
-                fout.write(lout)
+                outlines.append(lout)
+        for lout in outlines:
+            fout.write(lout)
         fout.close()
 
     ranked_sites = [] # array of tuples in order, (refsite, value for this site)
@@ -1781,3 +1810,7 @@ def smooth_data(metric_blendeddata):
         cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title)
         cranpaths.append(cranpath)
     return cranpaths
+
+
+
+
