@@ -224,12 +224,17 @@ def read_specs(ap):
             tokens = l.split()
             for t in tokens[1:]:
                 ap.params["msa_path2nick"][t] = t
+        #if l.startswith("pdb"): # pdb pdb_path homologous_anc_path
+        #    tokens = l.split(0)
+        #    ap.params["pdbpaint"] = {}
+        #    ap.params["pdbpaint"][ tokens[1] ] = tokens[2]
     fin.close()    
     check_specs()
     
     for msapath in ap.params["msa_path2nick"]:
         seedseq = get_seed_seq(msapath, ap.params["seed"])
         ap.params["msa_seedseq"][ msapath ] = seedseq
+        
         
 def check_specs():
     """This method cross-references the configuration values in the spec. file."""

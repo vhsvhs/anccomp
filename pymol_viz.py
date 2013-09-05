@@ -66,11 +66,9 @@ def get_pdb_sites(pdb_path):
 def pymol_viz_helper(ap, data, seedseq):
     pass
 
-def do_pymol_viz(ap, mb):    
-    if PDBTOOLSDIR == False:
-        print "\n. Sorry, but you need pdb-tools installed in order to analyze your PDB file."
-        return
-    
+
+
+def getpdbsites(ap):
     # Get the PDB sequence:
     pdb_path = ap.getOptionalArg("--pdb_path")
     print "\n. I'm plotting scores onto the PDB file", pdb_path
@@ -81,7 +79,7 @@ def do_pymol_viz(ap, mb):
     # Does the PDB sequence match the seed sequence?
     lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
     this_seq = dat2seq( ap.params["msa_comparisons"][lnick][1] )
-    (this_identity, this_score, this_align1, this_align2, this_symbol) = needle(this_seq, pdb_seq)
+    (this_identity, this_score, this_align1, this_align2, this_symbol) = water(this_seq, pdb_seq)
     #if this_identity > identity: # this sequence is a better match
     seq = this_seq
     #identity = this_identity
@@ -100,15 +98,61 @@ def do_pymol_viz(ap, mb):
         if align2[i] != "-":
             structsite = pdbsites[ pdbseqsite ]
             pdbseqsite2structsite[pdbseqsite] = structsite
-            #print i+1, structsite, pdb_seq[ pdbseqsite ], seq[i]
+            print i+1, structsite, pdbseqsite, pdb_seq[ pdbseqsite ], seq[i]
             pdbseqsite2refsite[ pdbseqsite ] = i
             pdbseqsite += 1
+    
+    return pdbseqsite2structsite
+    
+def do_pymol_viz(ap, mb):    
+    if PDBTOOLSDIR == False:
+        print "\n. Sorry, but you need pdb-tools installed in order to analyze your PDB file."
+        return
+    
+    # Get the PDB sequence:
+    pdb_path = ap.getOptionalArg("--pdb_path")
+    print "\n. I'm plotting scores onto the PDB file", pdb_path
+    pdb_seq = get_seq_from_pdb(pdb_path)
+    #print "\n. The PDB sequence is:\n", pdb_seq
+    
+    # Does the PDB sequence match the seed sequence?
+    #lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+    best_match_msanick = None
+    best_identity = 0
+    align2 = None
+    seq = None
+    if ap.params["msa_comparisons"].keys().__len__() > 1:
+        print "\n. I'm determining which MSA best matches the sequence in your PDB."
+    for msanick in ap.params["msa_comparisons"]:
+        this_seq = dat2seq( ap.params["msa_comparisons"][msanick][1] )
+        (this_identity, this_score, this_align1, this_align2, this_symbol) = needle(this_seq, pdb_seq)
+        #print msanick, this_identity
+        if this_identity > best_identity: # this sequence is a better match
+            seq = this_seq
+            best_match_msanick = msanick
+            best_identity = this_identity
+            align2 = this_align2
+            
+    pdbsites = get_pdb_sites(pdb_path)
+    
+    pdbseqsite2structsite = {}
+    pdbseqsite2refsite = {} # key = 1-based pdb site number, value = 1-based ref site number
+    pdbsite = 0
+    for i in range(0, align2.__len__()):
+        if align2[i] != "-":
+            structsite = pdbsites[ pdbsite ]
+            pdbseqsite2structsite[pdbsite] = structsite
+            pdbseqsite2refsite[ pdbsite ] = i
+            #print "refsite:", i+1, seq[i], "pdbseqsite:", pdbsite+1, pdb_seq[pdbsite], "struct site:", structsite 
+            pdbsite += 1
+    
+    # correct up to here.
     
     for metric in mb:
         data = mb[metric]
         outlines = ""
         outlines += "cmd.load(\"" + os.path.abspath(pdb_path) + "\")\n"
-        #pdb_site = pdb_offset-1
+        #pdb_site = pdb_offset
         
         maxh = data[data.keys()[0]]
         minh = data[data.keys()[0]]
@@ -128,7 +172,9 @@ def do_pymol_viz(ap, mb):
         sdev = sd(allvals)
         avg = mean(allvals)
 
-        scriptpath = "pymol_script." + metric + ".p"
+        tokens = pdb_path.split("/")
+        ancname = tokens[ tokens.__len__()-1 ].split(".")[0]
+        scriptpath = "pymol_script." + metric + "." + ancname + ".p"        
         fout = open(scriptpath, "w")
         fout.write("cmd.load(\"" + os.path.abspath(pdb_path) + "\")\n")
         
@@ -136,6 +182,7 @@ def do_pymol_viz(ap, mb):
         pdbsites.sort()
         for site in pdbsites:
             refsite = pdbseqsite2refsite[site] # get the reference site for this PDB site
+            h = -1
             if (refsite+1) in data:
                 h = data[refsite+1]
                 if h < avg:
@@ -158,9 +205,12 @@ def do_pymol_viz(ap, mb):
                         this_color = snow                                
             else:
                 this_color = snow
-            # Here we do +1 because 'site' is 0-based, whereas the PDB is 1-based
-            #print ". Site", refsite+1, seq[refsite], pdbseqsite2structsite[site], pdb_seq[site], this_color 
-            fout.write("cmd.color(\"" + this_color + "\", \"resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n") 
+            #print ". Site", refsite+1, seq[refsite], pdbseqsite2structsite[site], pdb_seq[site], h, this_color 
+
+            fout.write("cmd.select(\"x\", \"" + ancname + " and resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n")
+            fout.write("cmd.color(\"" + this_color + "\", \"x\")\n")
+            #fout.write("cmd.color(\"" + this_color + "\", \"resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n") 
+            #fout.write("cmd.color(\"" + this_color + "\", \"resi " + (pdbseqsite2structsite[site]).__str__() + "\")\n")
         fout.close()
         
         print "\n\n. Load PyMol and run the following script: " + os.getcwd() + "/" + scriptpath
