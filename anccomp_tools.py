@@ -370,10 +370,6 @@ def align_msas():
                 while ap.params["msa_seedseq"][p][my_site-1] == "-" and my_site < ap.params["msa_seedseq"][p].__len__()+1:
                     my_site += 1
     
-    # Write the meta-alignment to a text file:
-    if msapaths.__len__() > 1:
-        write_meta_alignment(ap)
-
     # Identify invariant sites:
     invariant_sites = []
     fin = open(longest_msa, "r")
@@ -408,37 +404,62 @@ def write_meta_alignment(ap):
     msa_ids = {} # key = MSA path, value = integer ID
     ids_msa = {} # reverse hash of above
     longest_msa = ap.params["longest_msa"]
+    
     msa_ids[longest_msa] = 1
     ids_msa[1] = longest_msa
+    
+    
     counter = 2
     for path in ap.params["msa_path2nick"]:
         if path != longest_msa:
             msa_ids[ path ] = counter
             ids_msa[ counter ] = path
             counter += 1
+    
+    pdb_path = ap.getOptionalArg("--pdb_path")
+    #if pdb_path != None:
+        
+    #pdbseqsite2refsite
+    
     fout = open(get_output_dir(ap) + "/meta_alignment.txt", "w")
     ids = ids_msa.keys()
     ids.sort()
     fout.write("Alignment Key:\n")
     for i in ids:
         fout.write( "M" + i.__str__() + " : " + ap.params["msa_path2nick"][ ids_msa[i] ]  + "\n")
-    fout.write("\n")
+    fout.write("Seed: ungapped sites in " + ap.params["seed"] + "\n")
     header = ""
-    fout.write("Residues shown in parentheses express the state of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
-    fout.write("The mark 'x' indicates that no corresponding site was found in the alignment.\n")
+    #fout.write("Residues shown in parentheses express the state of taxon " + ap.params["seed"] + " at the corresponding site.\n\n")
+    fout.write("The mark 'x' indicates that no corresponding site was found in the alignment.\n\n")
     for i in ids:
         header += "M" + i.__str__() + "\t"
+    header += "Seed\t"
+    #header += "PDB\t"
     fout.write(header + "\n\n")
-    for site in range(0, ap.params["msa_seedseq"][longest_msa].__len__()):
+    #print ap.params["msa_path2nick"]
+    #print ap.params["msa_path2nick"][ longest_msa ]
+    
+    #print ap.params["msa_mysite2seedsite"]
+    #print ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][longest_msa] ]
+    
+    for site in range(0, ap.params["msa_seedseq"][ longest_msa ].__len__()):
         line = ""
         for i in ids:
             msanick = ap.params["msa_path2nick"][ids_msa[i]]
             if (site+1) in ap.params["msa_refsite2mysite"][ msanick ]:
                 mysite = ap.params["msa_refsite2mysite"][ msanick ][ site+1 ]
-                state = ap.params["msa_seedseq"][ids_msa[i]][mysite-1]
-                line += mysite.__str__() + " (" + state + ")\t"
+                line += mysite.__str__() + "\t"
+                #state = ap.params["msa_seedseq"][ids_msa[i]][mysite-1]
+                #line += mysite.__str__() + " (" + state + ")\t"
             else:
                 line += "x\t"
+        if (site+1) in ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][longest_msa] ]: 
+            seedsite = ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][longest_msa] ][ site+1 ]
+            line += seedsite.__str__()
+            line += " (" + ap.params["msa_seedseq"][longest_msa][site] + ")"
+            line += "\t"
+        else:
+            line += "x\t"
         fout.write( line + "\n" )
     fout.close()
 

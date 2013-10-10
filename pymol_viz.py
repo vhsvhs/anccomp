@@ -74,35 +74,38 @@ def getpdbsites(ap):
     print "\n. I'm plotting scores onto the PDB file", pdb_path
     pdb_seq = get_seq_from_pdb(pdb_path)
     #print "\n. The PDB sequence is:\n", pdb_seq
-
     
     # Does the PDB sequence match the seed sequence?
-    lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-    this_seq = dat2seq( ap.params["msa_comparisons"][lnick][1] )
-    (this_identity, this_score, this_align1, this_align2, this_symbol) = water(this_seq, pdb_seq)
-    #if this_identity > identity: # this sequence is a better match
-    seq = this_seq
-    #identity = this_identity
-    #score = this_score
-    align1 = this_align1
-    align2 = this_align2
-    #symbol = this_symbol
-    
+    #lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
+    best_match_msanick = None
+    best_identity = 0
+    align2 = None
+    seq = None
+    if ap.params["msa_comparisons"].keys().__len__() > 1:
+        print "\n. I'm determining which MSA best matches the sequence in your PDB."
+    for msanick in ap.params["msa_comparisons"]:
+        this_seq = dat2seq( ap.params["msa_comparisons"][msanick][1] )
+        (this_identity, this_score, this_align1, this_align2, this_symbol) = needle(this_seq, pdb_seq)
+        #print msanick, this_identity
+        if this_identity > best_identity: # this sequence is a better match
+            seq = this_seq
+            best_match_msanick = msanick
+            best_identity = this_identity
+            align2 = this_align2
+            
     pdbsites = get_pdb_sites(pdb_path)
     
     pdbseqsite2structsite = {}
     pdbseqsite2refsite = {} # key = 1-based pdb site number, value = 1-based ref site number
-    pdbsite = 0    # sites in the PDB (may not be continuous)
-    pdbseqsite = 0 # sites in the sequence array
+    pdbsite = 0
     for i in range(0, align2.__len__()):
         if align2[i] != "-":
-            structsite = pdbsites[ pdbseqsite ]
-            pdbseqsite2structsite[pdbseqsite] = structsite
-            print i+1, structsite, pdbseqsite, pdb_seq[ pdbseqsite ], seq[i]
-            pdbseqsite2refsite[ pdbseqsite ] = i
-            pdbseqsite += 1
-    
-    return pdbseqsite2structsite
+            structsite = pdbsites[ pdbsite ]
+            pdbseqsite2structsite[pdbsite] = structsite
+            pdbseqsite2refsite[ pdbsite ] = i
+            #print "refsite:", i+1, seq[i], "pdbseqsite:", pdbsite+1, pdb_seq[pdbsite], "struct site:", structsite 
+            pdbsite += 1
+    return pdbseqsite2refsite
     
 def do_pymol_viz(ap, mb):    
     if PDBTOOLSDIR == False:
@@ -174,7 +177,7 @@ def do_pymol_viz(ap, mb):
 
         tokens = pdb_path.split("/")
         ancname = tokens[ tokens.__len__()-1 ].split(".")[0]
-        scriptpath = "pymol_script." + metric + "." + ancname + ".p"        
+        scriptpath = get_output_dir(ap) + "/pymol_script." + metric + "." + ancname + ".p"        
         fout = open(scriptpath, "w")
         fout.write("cmd.load(\"" + os.path.abspath(pdb_path) + "\")\n")
         

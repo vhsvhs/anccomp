@@ -72,6 +72,11 @@ sites on which to restrict this analysis for the multiple sequence alignment at 
 """
 build_rsites()   
 
+
+# Write the meta-alignment to a text file:
+#if msapaths.__len__() > 1:
+write_meta_alignment(ap)
+
 """
 Part 3:
 Compare the ancestors.
