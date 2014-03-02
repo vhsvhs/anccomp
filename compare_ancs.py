@@ -28,7 +28,7 @@
 
  --restrict_to_seed
 
- --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include hb, p, k
+ --metrics <list> // Compare the ancestors using the metrics in the list.  Metric options include Df, p, k
 
  --skip_plots True // If True, then R scripts will be written, but not invoked.
 
@@ -72,7 +72,6 @@ sites on which to restrict this analysis for the multiple sequence alignment at 
 """
 build_rsites()   
 
-
 # Write the meta-alignment to a text file:
 #if msapaths.__len__() > 1:
 write_meta_alignment(ap)
@@ -106,23 +105,20 @@ Part 5a: Write a summary table with all sites and their scores.
 metric_ranked = rank_all(metric_data, metric_blendeddata)
 write_summary_table(metric_blendeddata, metric_data, metric_ranked)
 
+print "108"
+
 """
 Part 5b: Rank the sites, and correlate metrics (only if multiple metrics were used).
 """
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end. 
-
-
-
-
 cranpaths += correlate_all(metric_ranked, metric_blendeddata)
-
-
 
 """
 Part 5c: Smooth the data, using a user-specified window.
          Scripts for R plots are also written in this method. . .
 """       
 cranpaths += smooth_data(metric_blendeddata)     
+
 
 """
 Now execute all the R scripts.

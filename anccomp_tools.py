@@ -6,12 +6,12 @@ from argparser import *
 ap = ArgParser(sys.argv)
 
 METRIC_COLORS = {}
-METRIC_COLORS["hb"] = "black"
+METRIC_COLORS["Df"] = "black"
 METRIC_COLORS["k"] = "red"
 METRIC_COLORS["p"] = "blue"
 
 METRIC_WT = {}
-METRIC_WT["hb"] = "2.5"
+METRIC_WT["Df"] = "2.5"
 METRIC_WT["k"] = "1.0"
 METRIC_WT["p"] = "1.0"
 
@@ -77,8 +77,7 @@ def datpath_to_short(msapath):
     path = re.sub(".dat", "", path)
     return path
 
-#########################################################################
-
+###################################################
 def get_seq_from_msa(seq, msapath):
     fin = open(msapath, "r")
     lines = fin.readlines()
@@ -183,7 +182,7 @@ def read_cli(ap):
     
     ap.params["metrics"] = ap.getOptionalList("--metrics")
     if ap.params["metrics"] == None:
-        ap.params["metrics"] = ["hb"]
+        ap.params["metrics"] = ["Df"]
 
     if ap.doesContainArg("--restrict_sites") or ap.doesContainArg("--restrict_to_seed"):
         ap.params["winsizes"] = [1]
@@ -220,10 +219,10 @@ def read_specs(ap):
             ap.params["msa_nick2path"][ msanick ] = msapath
         # "msapaths" is depricated in the spec files, but I'm keeping in the
         # code for legacy-support reasons.
-        if l.startswith("msapaths"):
-            tokens = l.split()
-            for t in tokens[1:]:
-                ap.params["msa_path2nick"][t] = t
+#         if l.startswith("msapaths"):
+#             tokens = l.split()
+#             for t in tokens[1:]:
+#                 ap.params["msa_path2nick"][t] = t
         #if l.startswith("pdb"): # pdb pdb_path homologous_anc_path
         #    tokens = l.split(0)
         #    ap.params["pdbpaint"] = {}
@@ -263,6 +262,11 @@ def check_specs():
 def check_msa(msapath):
     """Verify that the multiple sequence alignment at path 'msapath' is a
     valid Phylip-formatted alignment."""
+    if False == os.path.exists(msapath):
+        print "\n. Sorry, I can't find your alignment ", msapath
+        exit()
+    
+    
 #    fin = open(msapath, "r")
 #    for l in fin.xreadlines():
 #        tokens = l.split()
@@ -521,9 +525,9 @@ def build_rsites():
             else:
                 ap.params["rsites"][lnick].append(site)                
     
-    #print "488:", ap.params["rsites"][lnick]
-    #print "489:", ap.params["rsites"][lnick].__len__()
-    #exit()
+    
+    #print "debug 488:", lnick, ap.params["rsites"][lnick]
+    #print "debug 489:", ap.params["rsites"][lnick].__len__()
     
     # Map the restriction sites onto the other MSAs. . . 
     for site in ap.params["rsites"][lnick]:
@@ -531,7 +535,7 @@ def build_rsites():
         for msanick in ap.params["msa_nick2path"]:
             if msanick != lnick:
                 if site in ap.params["msa_refsite2mysite"][msanick]:
-                    #print "492:", site, msanick, lnick
+                    #print "debug 492:", site, msanick, lnick, ap.params["msa_refsite2mysite"][msanick][site]
                     ap.params["rsites"][msanick].append( ap.params["msa_refsite2mysite"][msanick][site] )
     # Cull the invariant sites from our analysis:
 #    for site in ap.params["invariant_sites"]:
@@ -542,18 +546,20 @@ def build_rsites():
 #                    ap.params["rsites"][msanick].pop( ap.params["msa_refsite2mysite"][msanick][site] ) 
 
     if ap.doesContainArg("--renumber_sites"):
+        print ". Renumbering sites..."
         ref2seed = {} # key = reference site, value = corresponding seed sequence site
         count = 0
         for site in ap.params["rsites"][lnick]:
             count += 1
             ref2seed[site] = count
     
+        print ". Mapping sites to seed sequence."
         ap.params["msa_mysite2seedsite"] = {}
         for msanick in ap.params["msa_nick2path"]:
             ap.params["msa_mysite2seedsite"][msanick] = {}
             for mysite in ap.params["rsites"][msanick]:
                 ap.params["msa_mysite2seedsite"][msanick][mysite] = ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
-                #print msanick, mysite, ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
+                #print "556:", msanick, mysite, ref2seed[ ap.params["msa_mysite2refsite"][msanick][mysite] ]
     
 def compare_dat_files(patha, pathb, msanick, method):
     """Compares two ancestors (at patha and pathb) from the same alignment (with nicknamed msanick).
@@ -594,11 +600,12 @@ def dat2pp(datpath):
     fin.close()
     
     for li in range(0, linesa.__len__()):    
-        l = linesa[li]  
+        l = linesa[li]
+        if l.startswith("#") or l.__len__() < 3:
+            continue  
         site = int(l.split()[0])
         data[site] = datline_2_pphash(l)
     return data
-
 
 def dat2seq(datpath, remove_indels=False):
     """Returns the ML sequence from an ancestral *.dat file."""
@@ -933,7 +940,7 @@ def entropy(h, ppcull=0.0):
         epy += newh[c] * math.log( newh[c] )
     return -1.0 * epy
 
-def d(ancx, ancy, method="hb"):
+def d(ancx, ancy, method="Df"):
     """Compares a single site in ancestor x to a single site in ancestor Y."""    
 
     # First, fix the PP vector to contain no zeros.
@@ -947,11 +954,12 @@ def d(ancx, ancy, method="hb"):
 #            ancy[aa] = 0.05
             
     pieces = []        
-    if method == "hb": # i.e., k times p
+    if method == "Df": # i.e., k times p
         # observed/expectation:
         pieces.append( PDIST_WEIGHT*pdist(ancx, ancy) )
         # KL distance:
         pieces.append( KDIST_WEIGHT*kdist(ancx, ancy) )
+
     elif method == "k":
         # KL distance only:
         pieces.append( kdist(ancx, ancy) )
@@ -1105,7 +1113,8 @@ def plot_one_metric(data, outpath, title, ylab, color):
     y += ")"
     cranout.write( y + "\n")
         
-    cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
+    #cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
+    cranout.write("png('" + outpath + ".png', width=6.5, height=4);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + roundup(maxx, 100).__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='Sites homologous to " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, las=1, col='" + color + "', bty='n');\n")
     
     # insert any rectangles here, for highlighted sites
@@ -1175,10 +1184,10 @@ def normalize_vector(v):
 
     return norm_v
 
-def plot_multi_metrics(data, outpath, title):
+def plot_multi_metrics(data, outpath, title, image_type="pdf"):
     """data[metric][site] = value for metric"""
     
-    cranpath = outpath + ".rscript"
+    cranpath = outpath + "." + image_type + ".rscript"
     cranout = open(cranpath, "w")
 
     sites = data[ data.keys()[0] ].keys()
@@ -1200,9 +1209,11 @@ def plot_multi_metrics(data, outpath, title):
 #            else:
 #                yval = math.log( float(data[s]) + 1.0 )
 
-    cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
+    if image_type == "pdf":
+        cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
+    if image_type == "png":
+        cranout.write("png('" + outpath + ".pdf', width=8);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(-1,1), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='normalized score', main='" + title + "', lwd=2, col='white');\n")
-    
     metrics = data.keys()
     metrics.sort(reverse=False)
     for metric in metrics:
@@ -1303,7 +1314,6 @@ def write_change_summary_table(msa_changes):
         # [nsites, countindel, countred, countorange, countgreen]
         
 
-
 def write_summary_table(data, msa_scores, metric_ranked):
     foutpath = get_table_outpath(ap, tag="summary.txt")
     print "\n. I'm writing a table with all scores to", foutpath
@@ -1322,7 +1332,6 @@ def write_summary_table(data, msa_scores, metric_ranked):
             site = tuple[0]
             metric_site_rank[metric][site] = rank
             rank += 1
-    
     
     header = ""
     header += "site\t"
@@ -1429,7 +1438,7 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 lout += "\n" 
                 header_lout = ""
                 header_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
-                header_lout += "\tk= " + "%.3f"%h
+                header_lout += "\t" + method + "= " + "%.3f"%h
                 header_lout += "\trank: " + (i+1).__str__()
                 fout.write(header_lout + "\n")
                 
@@ -1453,6 +1462,9 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                                 lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][1]) + "\tsite " + re.sub("site ", "", l)
                 lout += "\n"
                 outlines.append(lout)
+        fout.close()
+        
+        fout = open( get_table_outpath(ap, tag=method+".details.txt"), "w")
         for lout in outlines:
             fout.write(lout)
         fout.close()
@@ -1655,11 +1667,13 @@ def plot_histogram(metric_data):
         cranpaths.append(cranpath) 
     return cranpaths
 
-
-
-
+#
+# ma and mb are sorted lists in score order
+#
 def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=None):    
     cranpaths = []
+    
+    print "entereted correlate_metrics"
     
     if  ma.__len__() != mb.__len__():
         print "\n. Hmm, something is wrong.  Anccomp_tools.py point 742."
@@ -1668,22 +1682,35 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
     mb_ranked = [] # V values in rank order
     rank_a_b = [] # array of triples (A val, B val, mark)
     count_skipped = 0
+    hrank = 0
     for i in range(0, ma.__len__()):
         hsite = ma[i][0]
-        psite = mb[i][0]
         maval = ma[i][1]
+        
+        psite = mb[i][0]
         mbval = mb[i][1]
 
-        hrank = i+1-count_skipped
+        if maval == 0.0 or mbval == 0.0:
+            #count_skipped += 1
+            #print "skipping", i, maval, mbval
+            continue
+
+        hrank += 1
+
         prank = 0
-        for j in range(0, mb.__len__()):
-            if mb[j][0] == ma[i][0]:
-                prank = j+1-count_skipped
-        #print maval, mbval, hrank, prank
+        j = -1
+        while j < mb.__len__():
+            j += 1
+            prank += 1
+            if mb[j][0] == psite:
+                j = mb.__len__()
+            
+        print maval, mbval, hrank, prank
         ma_ranked.append(maval)
         mb_ranked.append(mbval)
         if prank < 0:
             print prank
+            print "\n. Something is wrong with prank.  Goodbye."
             exit()
         mark = 1
         if maval == 0.0 and mbval == 0.0:
@@ -1833,7 +1860,9 @@ def smooth_data(metric_blendeddata):
         #
         multi_plot_outpath = get_plot_outpath(ap, tag=("all-by-site.w=" + w.__str__()) )
         plot_title = "All metrics, normalized, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
-        cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title)
+        cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title,image_type="pdf")
+        cranpaths.append(cranpath)
+        cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title, image_type="png")
         cranpaths.append(cranpath)
     return cranpaths
 

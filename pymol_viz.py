@@ -1,13 +1,14 @@
 from config import *
 from anccomp_tools import *
-
 from smith_waterman import *
 
 #
 # The PyMol visualization requires that you have pdb-tools (i.e. Mike Harm's tools).
 #
-PDBTOOLSDIR = ap.getOptionalArg("--pdbtoolsdir")
+#PDBTOOLSDIR = ap.getOptionalArg("--pdbtoolsdir")
+PDBTOOLSDIR = "/"
 PDBSEQ = "python " + PDBTOOLSDIR + "/pdb_seq.py"
+
 
 def get_seq_from_pdb(pdbpath):
     outpath = ".pdbseq"
