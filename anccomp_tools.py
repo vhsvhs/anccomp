@@ -681,7 +681,7 @@ def pptransform(ancpp):
             out[pp].append(state)
     return out
 
-def get_htmlfrag(ancpp1, ancpp2, rowcolor=None):
+def get_htmlfrag(ancpp1, ancpp2, rowcolor=None):    
     anctrans1 = pptransform(ancpp1)
     anctrans2 = pptransform(ancpp2)
     pps1 = anctrans1.keys()
@@ -817,7 +817,8 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             #
             # and gather HTML fragments for later, when we write a report.
             #
-            htmlfrags[site] = get_htmlfrag( anc_data[patha][site], anc_data[pathb][site], rowcolor )
+            if a_state != "-" and b_state != "-":
+                htmlfrags[site] = get_htmlfrag( anc_data[patha][site], anc_data[pathb][site], rowcolor )
         
         
     return [ [nsites, countindel, countred, countorange, countgreen], htmlfrags]
