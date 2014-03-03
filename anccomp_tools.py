@@ -662,11 +662,13 @@ def write_changes_summary(msa_changes):
     #key += "==============================================================================================\n\n" 
     #fout.write(key)
     
-    header = "Alignment & Model\tN sites\tN indel events\tType 1\tType 2\tType3\n"
+    header = "Alignment\tModel\tN sites\tIndel Events\tType 1 Events\tType 2 Events\tType 3 Events\n"
     fout.write(header)
     for msa in msa_changes:
+        alignment = msa.split(".")[0]
+        model = msa.split(".")[1]
         [nsites, countindel, countred, countorange, countgreen] = msa_changes[msa]
-        fout.write(msa + "\t" + nsites.__str__() + "\t" + countindel.__str__() + "\t" + countred.__str__() + "\t" + countorange.__str__() + "\t" + countgreen.__str__() + "\n")
+        fout.write(alignment + "\t" + model + "\t" + nsites.__str__() + "\t" + countindel.__str__() + "\t" + countred.__str__() + "\t" + countorange.__str__() + "\t" + countgreen.__str__() + "\n")
     fout.close()
     
 def pptransform(ancpp):    
