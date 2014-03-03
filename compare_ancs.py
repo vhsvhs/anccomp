@@ -41,6 +41,7 @@
 from config import *
 from anccomp_tools import *
 from pymol_viz import *
+from html_report import *
 
 show_splash()
 
@@ -85,7 +86,7 @@ if ap.params["metrics"].__len__() > 1: # plural. . .
 else: # . . . or singular
     print "\n. I'm comparing ancestors using the metric", ap.params["metrics"][0]    
 
-[msa_changes, metric_data] = compare_ancestors() # metric_data[metric][msa nickname][site] = score
+[metric_data, msa_htmlfrags] = compare_ancestors() # metric_data[metric][msa nickname][site] = score
 
 """
 Part 4:
@@ -124,9 +125,12 @@ cranpaths += smooth_data(metric_blendeddata)
 Now execute all the R scripts.
 """
 if False == ap.getOptionalToggle("--skip_plots"):
+    fout = open("run_rscripts.sh", "w")
     for c in cranpaths:
         print "\n. I'm plotting results, using the R script written at [", c, "] . . ."
-        os.system("/usr/bin/Rscript " + c)
+        fout.write("r --no-save < " + c + "\n")
+    fout.close()
+    os.system("source run_rscripts.sh")
 else:
     print "\n. I'm skipping the result plots."
     print ". You can build these plots later by invoking the following R scripts:"
@@ -146,7 +150,10 @@ if False != ap.getOptionalArg("--pdb_path"):
     do_pymol_viz(ap, metric_blendeddata)
 
 
-#write_html_summary(ap)
+#
+# Write an HTML Report
+#
+write_table1(ap, metric_data, msa_htmlfrags)
 
 
 print "\n\n. I'm finished.  The results were written to the folder", get_plot_outpath(ap)

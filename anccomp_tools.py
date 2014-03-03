@@ -622,8 +622,10 @@ def dat2seq(datpath, remove_indels=False):
     return mlseq
 
 
+
 def compare_ancestors():
     msa_changes = {} # key = msa nickname, value = output from the method 'count_changes_between_ancestors'
+    msa_htmlfrags = {}
     metric_data = {}
     for msanick in ap.params["msa_nick2path"]:
         this_ancpath = ap.params["msa_comparisons"][msanick][0]
@@ -631,7 +633,7 @@ def compare_ancestors():
         print "\n. . .I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
     
         # Compare the ancestors in simple terms, by the number of amino acid changes and the number of indel changes, etc.
-        msa_changes[msanick] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
+        [msa_changes[msanick], msa_htmlfrags[msanick]] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
         
         # Compare the ancestors using our statistical metrics
         for metric in ap.params["metrics"]:
@@ -639,26 +641,26 @@ def compare_ancestors():
                 metric_data[metric] = {}
             metric_data[metric][msanick] = compare_dat_files(this_ancpath, that_ancpath, msanick, metric)    
     write_changes_summary(msa_changes)
-    return [msa_changes, metric_data]
+    return [metric_data, msa_htmlfrags]
 
 def write_changes_summary(msa_changes):
 
         #print msa, nsites, countindel, countred, countorange, countgreen
     fout = open(get_output_dir(ap) + "/ancestral_changes.txt", "w")
     
-    key = "===============================================================================================\n"
-    key += "A summary of changes between ancestors AncX and AncY. . .\n\n"
-    key += "Key:\n\n"
-    key += "N sites: the total number of sites in AncX and AncY.\n"
-    key += "Indel changes: the number of insertion or deletions between the two ancestors.\n"
-    key += "Type 1: AncY has a different ML state than AncX, and AncX has no support for AncY's state,\n"
-    key += "        and AncY has no support for AncX's state.\n"
-    key += "Type 2: AncY has a different ML state than AncX, but AncX has mild support for AncY's state,\n"
-    key += "        or AncY has mild support for AncX's state.\n"
-    key += "Type 3: AncX and AncY have the same ML state, but either AncX or AncY has strong uncertainty\n"
-    key += "        about this state.\n"
-    key += "==============================================================================================\n\n" 
-    fout.write(key)
+    #key = "===============================================================================================\n"
+    #key += "A summary of changes between ancestors AncX and AncY. . .\n\n"
+    #key += "Key:\n\n"
+    #key += "N sites: the total number of sites in AncX and AncY.\n"
+    #key += "Indel changes: the number of insertion or deletions between the two ancestors.\n"
+    #key += "Type 1: AncY has a different ML state than AncX, and AncX has no support for AncY's state,\n"
+    #key += "        and AncY has no support for AncX's state.\n"
+    #key += "Type 2: AncY has a different ML state than AncX, but AncX has mild support for AncY's state,\n"
+    #key += "        or AncY has mild support for AncX's state.\n"
+    #key += "Type 3: AncX and AncY have the same ML state, but either AncX or AncY has strong uncertainty\n"
+    #key += "        about this state.\n"
+    #key += "==============================================================================================\n\n" 
+    #fout.write(key)
     
     header = "Alignment & Model\tN sites\tN indel\tType1\tType2\tType3\n"
     fout.write(header)
@@ -667,12 +669,67 @@ def write_changes_summary(msa_changes):
         fout.write(msa + "\t" + nsites.__str__() + "\t" + countindel.__str__() + "\t" + countred.__str__() + "\t" + countorange.__str__() + "\t" + countgreen.__str__() + "\n")
     fout.close()
     
+def pptransform(ancpp):    
+    """Input a PP distribution for one site.
+    Output: transformed hashtable with data[pp] = one or more states with this PP."""
+    out = {}
+    for state in ancpp:
+        pp = "%.3f"%ancpp[state]
+        if pp not in out:
+            out[pp] = [state]
+        else:
+            out[pp].append(state)
+    return out
+
+def get_htmlfrag(ancpp1, ancpp2, rowcolor=None):
+    anctrans1 = pptransform(ancpp1)
+    anctrans2 = pptransform(ancpp2)
+    pps1 = anctrans1.keys()
+    pps1.sort(reverse=True)
+    pps2 = anctrans2.keys()
+    pps2.sort(reverse=True)
+    out1 = "<td>1:</td>"
+    count1len = 0
+    for pp in pps1:
+        if float(pp) > 0.0:
+            for state in anctrans1[pp]:
+                out1 += "<td>" + state + " (" + pp + ")" + "<td>"
+                count1len += 1
+    count2len = 0
+    out2 = "<td>2:</td>"
+    for pp in pps2:
+        if float(pp) > 0.0:
+            for state in anctrans2[pp]:
+                out2 += "<td>" + state + " (" + pp + ")" + "<td>"            
+                count2len += 1
     
+    if count1len < count2len:
+        for i in range(0, count2len-count1len):
+            out1 += "<td></td>"
+    elif count2len < count1len:
+        for i in range(0, count1len-count2len):
+            out2 += "<td></td>"
+    
+    out = "<table>"
+    style = ""
+    #style = "whiterow"
+    #if rowcolor == "red":
+    #    style = "redrow"
+    #elif rowcolor == "orange":
+    #    style = "orangerow"
+    out += "<tr class=\"" + style + "\">" + out1 + "</tr>"
+    out += "<tr class=\"" + style + "\">" + out2 + "</tr>"
+    out += "</table>"
+    return out
+
 def count_changes_between_ancestors(patha, pathb, msanick):    
     """Counts the number of amino acid differences between two ancestors."""
     anc_data = {}
     anc_data[patha] = dat2pp(patha)
     anc_data[pathb] = dat2pp(pathb)
+    
+    htmlfrags = {} # output lines of HTML fragments for table1
+    
         
     #
     # These variables will be filled with values over the duration
@@ -692,19 +749,14 @@ def count_changes_between_ancestors(patha, pathb, msanick):
 
     for site in sites:
         if site in ap.params["rsites"][msanick]:            
+            rowcolor = "None"
             nsites += 1
             indel = False
             red = False
             orange = False
             green = False
-             
-            #print site           
             a_state = getmlstate( anc_data[patha][site] )
             b_state = getmlstate( anc_data[pathb][site] )
-            #print "609:", anc_data[patha][site]
-            #print "610:", anc_data[pathb][site]
-            #print b_state, a_state, patha, pathb, site
-            # test for indel mismatch:
             if b_state == None and a_state == None:
                 continue
             elif b_state != a_state:
@@ -713,24 +765,31 @@ def count_changes_between_ancestors(patha, pathb, msanick):
                     #print "indel"
                 elif b_state not in anc_data[patha][site]:
                     red = True
+                    rowcolor = "red"
                 elif a_state not in anc_data[pathb][site]:
                     red = True
+                    rowcolor = "red"
                 elif False == anc_data[pathb][site].keys().__contains__(a_state):
                     red = True
+                    rowcolor = "red"
                     #print "red"
                 elif False == anc_data[ patha ][site].keys().__contains__(b_state):
                     red = True
+                    rowcolor = "red"
                     #print "red"
                 elif anc_data[patha][site][b_state] < 0.05 and anc_data[pathb][site][a_state] < 0.05:
                     red = True
+                    rowcolor = "red"
                     #print "red"
                 # test for orange:
                 else:
                     orange = True
+                    rowcolor = "orange"
                     #print "orange"
             # test for green
             elif (anc_data[pathb][site][b_state] < 0.8 and anc_data[patha][site][b_state] > 0.8) or (anc_data[pathb][site][b_state] > 0.8 and anc_data[patha][site][b_state] < 0.8):
                     green = True
+                    rowcolor = "green"
             
             
             if indel:
@@ -754,26 +813,15 @@ def count_changes_between_ancestors(patha, pathb, msanick):
                 #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
                 #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
         
-    return [nsites, countindel, countred, countorange, countgreen]
+            
+            #
+            # and gather HTML fragments for later, when we write a report.
+            #
+            htmlfrags[site] = get_htmlfrag( anc_data[patha][site], anc_data[pathb][site], rowcolor )
+        
+        
+    return [ [nsites, countindel, countred, countorange, countgreen], htmlfrags]
     
-#    print "============================================================"
-#    print "Legend:"
-#    print "- case 1: sites with disagreeing ML states, and neither ancestral vector has strong support for the others' state."
-#    print "- case 2: sites with disagreeing ML states, but one or both of the ancestral vectors has PP < 0.05 for the others' ML state."
-#    print "- case 3: sites with the same ML state, but one of the ancestral vectors strongly supports (PP > 0.8) the state, while the other vector poorly supports (PP < 0.8) the state."
-#    print "============================================================"
-#    print "\n"
-#    
-#    print "============================================================"
-#    print "Summary:"
-#    print "nsites=", nsites
-#    print "indel_mismatch=", countindel
-#    print "case 1=", countred, "sites: ",  redsites
-#    print "case 2=", countorange, "sites: ",  orangesites
-#    print "case 3=", countgreen, "sites: ", greensites
-#    print "============================================================"
-#    print "\n\n"
-
 
 def compute_cdata(msapath, winsize):
     """Computes basic conservation."""
@@ -1057,14 +1105,14 @@ def fill_missing_sites(data):
             new_data[i] = 0.0
     return new_data
 
-def plot_one_metric(data, outpath, title, ylab, color):
+def plot_one_metric(data, outpath, title, ylab, color, image_type="pdf"):
     if False == ap.doesContainArg("--renumber_sites"):
         data = fill_missing_sites(data)
     
     #print "1004:", data
     #exit()
     
-    cranpath = outpath + ".rscript"
+    cranpath = outpath + "." + image_type + ".rscript"
     cranout = open(cranpath, "w")
     x = "x <- c("
     y = "y <- c("
@@ -1113,8 +1161,10 @@ def plot_one_metric(data, outpath, title, ylab, color):
     y += ")"
     cranout.write( y + "\n")
         
-    #cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
-    cranout.write("png('" + outpath + ".png', width=6.5, height=4);\n")
+    if image_type == "pdf":
+        cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
+    elif image_type == "png":
+        cranout.write("png('" + outpath + ".png', width=800, height=300);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + roundup(maxx, 100).__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='Sites homologous to " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, las=1, col='" + color + "', bty='n');\n")
     
     # insert any rectangles here, for highlighted sites
@@ -1212,7 +1262,7 @@ def plot_multi_metrics(data, outpath, title, image_type="pdf"):
     if image_type == "pdf":
         cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
     if image_type == "png":
-        cranout.write("png('" + outpath + ".pdf', width=8);\n")
+        cranout.write("png('" + outpath + ".png', width=800, height=300);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(-1,1), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='normalized score', main='" + title + "', lwd=2, col='white');\n")
     metrics = data.keys()
     metrics.sort(reverse=False)
@@ -1510,7 +1560,7 @@ def get_bin(value, bins):
             ret = i
     return ret
 
-def plot_histogram(metric_data):
+def plot_histogram(metric_data, image_type="pdf"):
     cranpaths = []
     for metric in metric_data:
         maxx = None
@@ -1579,8 +1629,12 @@ def plot_histogram(metric_data):
         """
         Write the R script.
         """        
-        pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
-        cranstr = "pdf(\"" + pdfpath + "\", width=5, height=4);\n"    
+        if image_type == "pdf":
+            pdfpath = get_plot_outpath(ap, tag=metric + "-histogram.pdf")
+            cranstr = "pdf(\"" + pdfpath + "\", width=5, height=4);\n"    
+        elif image_type == "png":
+            pngpath = get_plot_outpath(ap, tag=metric + "-histogram.png")
+            cranstr = "png(\"" + pngpath + "\", width=500, height=300);\n" 
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
@@ -1604,7 +1658,9 @@ def plot_histogram(metric_data):
         xmin = roundup(minx, 1.0)
         cranstr += "plot(c(" + roundup(xmin,2.0).__str__() + "," + roundup(xmax, 2.0).__str__() + "), c(0,20), type='n',xlab='" + metric + " score', ylab='N sites', main='" + metric + " histogram " + time.asctime().__str__() + "',lwd=2, las=1, col='black', bty='n');\n"
         for bin in bins:
-            colstr = ""
+            colstr = "black"
+            
+            """ depricated.
             if bin < avg:
                 if bin <= avg - 6*sdev:
                     colstr = "red1"
@@ -1623,6 +1679,8 @@ def plot_histogram(metric_data):
                     colstr = "deepskyblue2"
                 else:
                     colstr = "black" 
+            """
+            
             cranstr += "rect(" + bin.__str__() + ", 0.0, " + (bin+binwidth).__str__() + ", " + bin_count[bin].__str__() + ", col=\"" + colstr + "\", lwd=0.1);\n"
 
         # depricated
@@ -1660,7 +1718,7 @@ def plot_histogram(metric_data):
 
         cranstr += "dev.off();\n"
     
-        cranpath = get_plot_outpath(ap, tag=metric + "-histogram.rscript")
+        cranpath = get_plot_outpath(ap, tag=metric + "-" + image_type + "-histogram.rscript")
         fout = open(cranpath, "w")
         fout.write( cranstr )
         fout.close()
@@ -1717,8 +1775,9 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
             mark = 0
         rank_a_b.append( (hrank, prank, mark) )
     spearmans =  ss.spearmanr(ma_ranked, mb_ranked)
-    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]))
-    #os.system("r --no-save < " + path)
+    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]), image_type="pdf")
+    cranpaths.append( path )
+    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]), image_type="png")
     cranpaths.append( path )
 
     fout = open( get_plot_outpath(ap, tag="corr-rank." + tag) + ".txt" , "w")
@@ -1742,8 +1801,9 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
     pearsons = ss.pearsonr(mavals, mbvals)
     pearsonsT = pearsons[0]
     pearsonsP = pearsons[1]
-    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT) )
-    #os.system("r --no-save < " + path)
+    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT), image_type="pdf")
+    cranpaths.append( path )
+    path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT), image_type="png" )
     cranpaths.append( path )
     
     fout = open( get_plot_outpath(ap, tag="corr-value." + tag) + ".txt" , "w")
@@ -1755,8 +1815,8 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
     return cranpaths
     #return [spearmans, pearsons]
     
-def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=None):
-    cranpath = outpath + ".rscript"
+def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=None, image_type="pdf"):
+    cranpath = outpath + "." + image_type + ".rscript"
     cranout = open(cranpath, "w")
     miny = 0.0
     maxy = 0.0
@@ -1800,8 +1860,11 @@ def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=Non
     colors = re.sub(",$", "", colors)
     colors += ")"
     cranout.write( colors + "\n")
-        
-    cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
+    
+    if image_type == "pdf":
+        cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
+    elif image_type == "png":
+        cranout.write("png('" + outpath + ".png', width=500);\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab=\"" + xlab + "\", ylab=\"" + ylab + "\", main='" + title + "', lwd=2, col='" + color + "', bty='n');\n")
     if memo != None:
         textx = minx + 0.2*(maxx-minx)
@@ -1825,7 +1888,9 @@ def smooth_data(metric_blendeddata):
             
         if w == 1:
             # Plot the histogram of values. . . .
-            for cranpath in plot_histogram(w_metric_blendeddata[w]):
+            for cranpath in plot_histogram(w_metric_blendeddata[w], image_type="pdf"):
+                cranpaths.append( cranpath )
+            for cranpath in plot_histogram(w_metric_blendeddata[w], image_type="png"):
                 cranpaths.append( cranpath )
             
             stats_outpath = get_plot_outpath(ap, tag=("stats" ) ) + ".txt"
@@ -1852,8 +1917,10 @@ def smooth_data(metric_blendeddata):
             if False != ap.getOptionalArg("--combo_method"):
                 combo_substring = ", " + ap.getOptionalArg("--combo_method")
             plot_title = metric + " score, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
-            cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black")
+            cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black", image_type="pdf")
             cranpaths.append(cranpath)  
+            cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black", image_type="png")
+            cranpaths.append(cranpath) 
         
         #
         # Plot the site-by-metric, normalized, for all metrics on one plot.
