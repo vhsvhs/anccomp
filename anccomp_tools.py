@@ -662,7 +662,7 @@ def write_changes_summary(msa_changes):
     #key += "==============================================================================================\n\n" 
     #fout.write(key)
     
-    header = "Alignment & Model\tN sites\tN indel\tType1\tType2\tType3\n"
+    header = "Alignment & Model\tN sites\tN indel events\tType 1\tType 2\tType3\n"
     fout.write(header)
     for msa in msa_changes:
         [nsites, countindel, countred, countorange, countgreen] = msa_changes[msa]
@@ -817,7 +817,7 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             #
             # and gather HTML fragments for later, when we write a report.
             #
-            if a_state != "-" and b_state != "-":
+            if "-" not in anc_data[patha][site] or "-" not in anc_data[pathb][site]:
                 htmlfrags[site] = get_htmlfrag( anc_data[patha][site], anc_data[pathb][site], rowcolor )
         
         
@@ -932,6 +932,8 @@ def kl_divergence(ppx, ppy):
 def getmlstate(pp):
     maxa = None
     maxpp = 0.0
+    if "-" in pp.keys():
+        return None
     for a in AA_ALPHABET:
         if a in pp:
             if maxpp < pp[a]:
@@ -993,14 +995,10 @@ def d(ancx, ancy, method="Df"):
     """Compares a single site in ancestor x to a single site in ancestor Y."""    
 
     # First, fix the PP vector to contain no zeros.
-#    if "-" in ancx.keys() or "X" in ancx.keys():
-#        ancx = {}
-#        for aa in AA_ALPHABET:
-#            ancx[aa] = 0.05
-#    if "-" in ancy.keys() or "X" in ancy.keys():
-#        ancy = {}
-#        for aa in AA_ALPHABET:
-#            ancy[aa] = 0.05
+    if "-" in ancx.keys() or "X" in ancx.keys():
+        return 0.0
+    if "-" in ancy.keys() or "X" in ancy.keys():
+        return 0.0
             
     pieces = []        
     if method == "Df": # i.e., k times p
