@@ -633,7 +633,7 @@ def compare_ancestors():
         print "\n. . .I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
     
         # Compare the ancestors in simple terms, by the number of amino acid changes and the number of indel changes, etc.
-        [msa_changes[msanick], msa_htmlfrags[msanick]] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
+        msa_changes[msanick] = count_changes_between_ancestors( this_ancpath, that_ancpath, msanick )
         
         # Compare the ancestors using our statistical metrics
         for metric in ap.params["metrics"]:
@@ -641,35 +641,71 @@ def compare_ancestors():
                 metric_data[metric] = {}
             metric_data[metric][msanick] = compare_dat_files(this_ancpath, that_ancpath, msanick, metric)    
     write_changes_summary(msa_changes)
-    return [metric_data, msa_htmlfrags]
+    return metric_data
+
 
 def write_changes_summary(msa_changes):
-
-        #print msa, nsites, countindel, countred, countorange, countgreen
+    """Summarize the change counts in one table."""
     fout = open(get_output_dir(ap) + "/ancestral_changes.txt", "w")
-    
-    #key = "===============================================================================================\n"
-    #key += "A summary of changes between ancestors AncX and AncY. . .\n\n"
-    #key += "Key:\n\n"
-    #key += "N sites: the total number of sites in AncX and AncY.\n"
-    #key += "Indel changes: the number of insertion or deletions between the two ancestors.\n"
-    #key += "Type 1: AncY has a different ML state than AncX, and AncX has no support for AncY's state,\n"
-    #key += "        and AncY has no support for AncX's state.\n"
-    #key += "Type 2: AncY has a different ML state than AncX, but AncX has mild support for AncY's state,\n"
-    #key += "        or AncY has mild support for AncX's state.\n"
-    #key += "Type 3: AncX and AncY have the same ML state, but either AncX or AncY has strong uncertainty\n"
-    #key += "        about this state.\n"
-    #key += "==============================================================================================\n\n" 
-    #fout.write(key)
-    
     header = "Alignment\tModel\tN sites\tIndel Events\tType 1 Events\tType 2 Events\tType 3 Events\n"
     fout.write(header)
     for msa in msa_changes:
         alignment = msa.split(".")[0]
         model = msa.split(".")[1]
-        [nsites, countindel, countred, countorange, countgreen] = msa_changes[msa]
-        fout.write(alignment + "\t" + model + "\t" + nsites.__str__() + "\t" + countindel.__str__() + "\t" + countred.__str__() + "\t" + countorange.__str__() + "\t" + countgreen.__str__() + "\n")
+        [nsites, indelsites,  redsites, orangesites, greensites] = msa_changes[msa]
+        fout.write(alignment + "\t" + model + "\t" + nsites.__str__() + "\t" + indelsites.__len__().__str__() + "\t" + redsites.__len__().__str__() + "\t" + orangesites.__len__().__str__() + "\t" + greensites.__len__().__str__() + "\n")
     fout.close()
+    
+    """Write a special HTML fragment, with highlighted sequences, for each model and alignment."""
+    for msa in msa_changes:
+        this_ancpath = ap.params["msa_comparisons"][msa][0]
+        that_ancpath = ap.params["msa_comparisons"][msa][1]
+        ml1 = get_ml_sequence_from_file(this_ancpath, getindels=True)
+        ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
+        seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
+        
+        CHARS_PER_LINE = 50
+        fout = open(get_output_dir(ap) + "/ancestral_changes." + msa + ".html", "w")
+
+        # Fill outl with output lines, then dump it to disk.
+        outl = ""
+        countsites = 0
+        for site in range(0, seed.__len__()):
+            if countsites%CHARS_PER_LINE == 0:
+                if countsites > 0:
+                    outl += siteline + "</tr>\n"
+                    outl += seedline + "</tr>\n"
+                    outl += ml1line  + "</tr>\n"
+                    outl += ml2line  + "</tr>\n"
+                    outl += "</table>"
+                outl += "<table>"   
+                siteline = "<tr><td style='smalltext'>site:</td>"
+                seedline = "<tr><td style='smalltext'>" + ap.params["msa_seedseq"] + "</td>"
+                ml1line = "<tr><td style='smalltext'>Anc #1:</td>"
+                ml2line = "<tr><td style='smalltext'>Anc #2:</td>"
+                countsites = 0
+            if (seed[site] != "-") or (ml1[site] != "-") or (ml2[site] != "-"):            
+                this_style = "whitetd"
+                if site in redsites:
+                    this_style = "redtd"
+                if site in orangesites:
+                    this_style = "orangetd"
+                if site in greensites:
+                    this_style = "bluetd"
+                siteline += "<td align='center' class=\"" + this_style + "\">" + site.__str__() + "</td>"
+                seedline += "<td align='center' class=\"" + this_style + "\">" + seed[site] + "</td>"
+                ml1line += "<td align='center' class=\"" + this_style + "\">" + ml1[site] + "</td>"
+                ml2line += "<td align='center' class=\"" + this_style + "\">" + ml2[site] + "</td>"
+                countsites += 1
+            if site == seed.__len__()-1:
+                outl += siteline + "</tr>\n"
+                outl += seedline + "</tr>\n"
+                outl += ml1line  + "</tr>\n"
+                outl += ml2line  + "</tr>\n"
+                outl += "</table>\n"
+        fout.write(outl + "\n")
+        fout.close()
+   
     
 def pptransform(ancpp):    
     """Input a PP distribution for one site.
@@ -729,10 +765,7 @@ def count_changes_between_ancestors(patha, pathb, msanick):
     anc_data = {}
     anc_data[patha] = dat2pp(patha)
     anc_data[pathb] = dat2pp(pathb)
-    
-    htmlfrags = {} # output lines of HTML fragments for table1
-    
-        
+
     #
     # These variables will be filled with values over the duration
     # of this method. . .
@@ -742,6 +775,7 @@ def count_changes_between_ancestors(patha, pathb, msanick):
     countred = 0    # sites with different ML states
     countorange = 0 # sites with different ML states, but same ML+1 states
     countgreen = 0  # sites same ML state, but one ancestor is uncertain
+    indelsites = []
     redsites = []
     orangesites = []
     greensites = []
@@ -764,7 +798,6 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             elif b_state != a_state:
                 if b_state == None or a_state == None:
                     indel = True
-                    #print "indel"
                 elif b_state not in anc_data[patha][site]:
                     red = True
                     rowcolor = "red"
@@ -774,56 +807,28 @@ def count_changes_between_ancestors(patha, pathb, msanick):
                 elif False == anc_data[pathb][site].keys().__contains__(a_state):
                     red = True
                     rowcolor = "red"
-                    #print "red"
                 elif False == anc_data[ patha ][site].keys().__contains__(b_state):
                     red = True
                     rowcolor = "red"
-                    #print "red"
                 elif anc_data[patha][site][b_state] < 0.05 and anc_data[pathb][site][a_state] < 0.05:
                     red = True
                     rowcolor = "red"
-                    #print "red"
-                # test for orange:
                 else:
                     orange = True
                     rowcolor = "orange"
-                    #print "orange"
-            # test for green
             elif (anc_data[pathb][site][b_state] < 0.8 and anc_data[patha][site][b_state] > 0.8) or (anc_data[pathb][site][b_state] > 0.8 and anc_data[patha][site][b_state] < 0.8):
                     green = True
                     rowcolor = "green"
             
-            
             if indel:
-                countindel += 1
+                indelsites.append(site)
             if red:
-                countred += 1
                 redsites.append(site)
-                ##print "site", site, " - case 1"
-                ##print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
             if orange:
-                countorange +=1
                 orangesites.append(site)
-                #print "site", site, " - case 2"
-                #print "\t", getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
             if green:
-                countgreen += 1
-                greensites.append(site)
-                #print "site", site, " - case 3"
-                #print "\t",getmlstate( anc_data[anc_data.keys()[0]][site] ), anc_data[anc_data.keys()[0]][site]
-                #print "\t",getmlstate( anc_data[anc_data.keys()[1]][site] ), anc_data[anc_data.keys()[1]][site]
-        
-            
-            #
-            # and gather HTML fragments for later, when we write a report.
-            #
-            if "-" not in anc_data[patha][site] or "-" not in anc_data[pathb][site]:
-                htmlfrags[site] = get_htmlfrag( anc_data[patha][site], anc_data[pathb][site], rowcolor )
-        
-        
-    return [ [nsites, countindel, countred, countorange, countgreen], htmlfrags]
+                greensites.append(site)        
+    return [nsites, indelsites, redsites, orangesites, greensites]
     
 
 def compute_cdata(msapath, winsize):
@@ -1165,7 +1170,7 @@ def plot_one_metric(data, outpath, title, ylab, color, image_type="pdf"):
     if image_type == "pdf":
         cranout.write("pdf('" + outpath + ".pdf', width=6.5, height=4);\n")
     elif image_type == "png":
-        cranout.write("png('" + outpath + ".png', width=800, height=300);\n")
+        cranout.write("png('" + outpath + ".png', width=800, height=300, bg = \"transparent\");\n")
     cranout.write("plot(c(" + minx.__str__() + "," + roundup(maxx, 100).__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab='Sites homologous to " + ap.params["seed"] + "', ylab='" + ylab + "', main='" + title + "', lwd=2, las=1, col='" + color + "', bty='n');\n")
     
     # insert any rectangles here, for highlighted sites
@@ -1263,7 +1268,7 @@ def plot_multi_metrics(data, outpath, title, image_type="pdf"):
     if image_type == "pdf":
         cranout.write("pdf('" + outpath + ".pdf', width=8, height=3.5);\n")
     if image_type == "png":
-        cranout.write("png('" + outpath + ".png', width=800, height=300);\n")
+        cranout.write("png('" + outpath + ".png', width=800, height=300, bg = \"transparent\");\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(-1,1), type='n',xlab='sites in " + ap.params["seed"] + "', ylab='normalized score', main='" + title + "', lwd=2, col='white');\n")
     metrics = data.keys()
     metrics.sort(reverse=False)
@@ -1356,14 +1361,6 @@ def blend_msa_data(msa_data):
                         bdata[ref_site] = ap.params["msa_weights"][msa] * myscore / msa_data.keys().__len__()
     return bdata
 
-def write_change_summary_table(msa_changes):
-    """Writes a table with a summary of how many states changed between ancestors."""
-    for msanick in msa_changes:
-        this_ancpath = ap.params["msa_comparisons"][msanick][0]
-        that_ancpath = ap.params["msa_comparisons"][msanick][1]
-        
-        # [nsites, countindel, countred, countorange, countgreen]
-        
 
 def write_summary_table(data, msa_scores, metric_ranked):
     foutpath = get_table_outpath(ap, tag="summary.txt")
@@ -1635,7 +1632,7 @@ def plot_histogram(metric_data, image_type="pdf"):
             cranstr = "pdf(\"" + pdfpath + "\", width=5, height=4);\n"    
         elif image_type == "png":
             pngpath = get_plot_outpath(ap, tag=metric + "-histogram.png")
-            cranstr = "png(\"" + pngpath + "\", width=500, height=300);\n" 
+            cranstr = "png(\"" + pngpath + "\", width=500, height=300, bg = \"transparent\");\n" 
     
         #for metric in metric_data:
         cranstr += metric + " <- c("
@@ -1730,10 +1727,7 @@ def plot_histogram(metric_data, image_type="pdf"):
 # ma and mb are sorted lists in score order
 #
 def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=None):    
-    cranpaths = []
-    
-    print "entereted correlate_metrics"
-    
+    cranpaths = []    
     if  ma.__len__() != mb.__len__():
         print "\n. Hmm, something is wrong.  Anccomp_tools.py point 742."
         exit()
@@ -1764,7 +1758,7 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
             if mb[j][0] == psite:
                 j = mb.__len__()
             
-        print maval, mbval, hrank, prank
+        #print maval, mbval, hrank, prank
         ma_ranked.append(maval)
         mb_ranked.append(mbval)
         if prank < 0:
@@ -1865,7 +1859,7 @@ def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=Non
     if image_type == "pdf":
         cranout.write("pdf('" + outpath + ".pdf', width=6, height=6);\n")
     elif image_type == "png":
-        cranout.write("png('" + outpath + ".png', width=500);\n")
+        cranout.write("png('" + outpath + ".png', width=500, bg = \"transparent\");\n")
     cranout.write("plot(c(" + minx.__str__() + "," + maxx.__str__() + "), c(" + miny.__str__() + "," + maxy.__str__() + "), type='n',xlab=\"" + xlab + "\", ylab=\"" + ylab + "\", main='" + title + "', lwd=2, col='" + color + "', bty='n');\n")
     if memo != None:
         textx = minx + 0.2*(maxx-minx)
@@ -1934,6 +1928,17 @@ def smooth_data(metric_blendeddata):
         cranpaths.append(cranpath)
     return cranpaths
 
-
+def get_ml_sequence_from_file(path, getindels=False):
+    fin = open(path, "r")
+    mlseq = ""
+    for l in fin.xreadlines():
+        if l.__len__() > 3:
+            tokens = l.split()
+            state = tokens[1]
+            if state != "-":
+                mlseq += state.upper()
+            elif getindels:
+                mlseq += "-"
+    return mlseq
 
 

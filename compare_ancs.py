@@ -86,7 +86,7 @@ if ap.params["metrics"].__len__() > 1: # plural. . .
 else: # . . . or singular
     print "\n. I'm comparing ancestors using the metric", ap.params["metrics"][0]    
 
-[metric_data, msa_htmlfrags] = compare_ancestors() # metric_data[metric][msa nickname][site] = score
+metric_data = compare_ancestors() # metric_data[metric][msa nickname][site] = score
 
 """
 Part 4:
@@ -105,8 +105,6 @@ Part 5a: Write a summary table with all sites and their scores.
 """
 metric_ranked = rank_all(metric_data, metric_blendeddata)
 write_summary_table(metric_blendeddata, metric_data, metric_ranked)
-
-print "108"
 
 """
 Part 5b: Rank the sites, and correlate metrics (only if multiple metrics were used).
@@ -153,7 +151,8 @@ if False != ap.getOptionalArg("--pdb_path"):
 #
 # Write an HTML Report
 #
-write_table1(ap, metric_data, msa_htmlfrags)
+# depricated:
+#write_table1(ap, metric_data)
 
 
 print "\n\n. I'm finished.  The results were written to the folder", get_plot_outpath(ap)
