@@ -186,6 +186,9 @@ def read_cli(ap):
 
     if ap.doesContainArg("--restrict_sites") or ap.doesContainArg("--restrict_to_seed"):
         ap.params["winsizes"] = [1]
+        
+    if ap.doesContainArg("--pymol_exe"):
+        ap.params["pymol_exe"] = ap.getArg("--pymol_exe")
     
 def read_specs(ap):
     """Read specifications given in the spec. file (using the --specpath command)."""
@@ -227,15 +230,19 @@ def read_specs(ap):
         #    tokens = l.split(0)
         #    ap.params["pdbpaint"] = {}
         #    ap.params["pdbpaint"][ tokens[1] ] = tokens[2]
+        elif l.startswith("pdb"):
+            tokens = l.split()
+            pdb_path = tokens[1]
+            ap.params["pdb"] = pdb_path
     fin.close()    
-    check_specs()
+    check_specs(ap)
     
     for msapath in ap.params["msa_path2nick"]:
         seedseq = get_seed_seq(msapath, ap.params["seed"])
         ap.params["msa_seedseq"][ msapath ] = seedseq
         
         
-def check_specs():
+def check_specs(ap):
     """This method cross-references the configuration values in the spec. file."""
     for msanick in ap.params["msa_comparisons"]:
         foundit = False
@@ -249,6 +256,12 @@ def check_specs():
             print "\n. Check your configuration file and try again.\n"
             exit(0)
             #ap.params["msa_path2nick"][ msapath ] = msapath
+
+    if "pdb_path" in ap.params:
+        if False == os.path.exists(ap.params["pdb_path"]):
+            print "\n. I can't find your PDB path at", ap.params["pdb_path"]
+            print "\n. Check your configuration file and try again.\n"
+            exit(0)
 
 #    #ap.params["anc_msasource"] = {}
 #    for msapath in ap.params["msa_path2nick"]:
@@ -643,6 +656,14 @@ def compare_ancestors():
     write_changes_summary(msa_changes)
     return metric_data
 
+def get_css_transform(x,y):
+    out = ""
+    out += "transform:scale(" + x.__str__() + "," + y.__str__() + "); " #/* W3C */"
+    out += "-webkit-transform:scale(" + x.__str__() + "," + y.__str__() + "); " # /* Safari and Chrome */"
+    out += "-moz-transform:scale(" + x.__str__() + "," + y.__str__() + "); " # /* Firefox */"
+    out += "-ms-transform:scale(" + x.__str__() + "," + y.__str__() + "); " # /* IE 9 */"
+    out += "-o-transform:scale(" + x.__str__() + "," + y.__str__() + ");"
+    return out
 
 def write_changes_summary(msa_changes):
     """Summarize the change counts in one table."""
@@ -658,51 +679,107 @@ def write_changes_summary(msa_changes):
     
     """Write a special HTML fragment, with highlighted sequences, for each model and alignment."""
     for msa in msa_changes:
+        [nsites, indelsites,  redsites, orangesites, greensites] = msa_changes[msa]
         this_ancpath = ap.params["msa_comparisons"][msa][0]
         that_ancpath = ap.params["msa_comparisons"][msa][1]
         ml1 = get_ml_sequence_from_file(this_ancpath, getindels=True)
         ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
         seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
         
-        CHARS_PER_LINE = 50
+        this_ancname = this_ancpath.split(".")[ this_ancpath.split(".").__len__()-2 ]
+        this_ancname = this_ancname.split("/")[1]
+        that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
+        that_ancname = that_ancname.split("/")[1]
+        
+        seedname = ap.params["seed"].split(".")
+        if seedname.__len__() > 2:
+            seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+        
+        CHARS_PER_LINE = 30
+        labelwidth = 18 # percent
+        colwidth = 82.0 / CHARS_PER_LINE
         fout = open(get_output_dir(ap) + "/ancestral_changes." + msa + ".html", "w")
 
         # Fill outl with output lines, then dump it to disk.
         outl = ""
         countsites = 0
-        for site in range(0, seed.__len__()):
+        #print "685:", ap.params["msa_refsite2mysite"][msa]
+        #for site in range(1, seed.__len__()+1): # site points into the seed sequence.
+        
+        sites = ap.params["msa_refsite2mysite"][msa].keys()
+        sites.sort()
+
+        msaprettyprint = msa.split(".")[0]
+
+        for site in sites:
+            msasite = ap.params["msa_refsite2mysite"][msa][site]
+            if msasite in ap.params["msa_mysite2seedsite"][msa]:
+                seedsite = ap.params["msa_mysite2seedsite"][msa][msasite]
+            else:
+                seedsite = "X"
+            #print "704:", msa, site, msasite, seedsite
             if countsites%CHARS_PER_LINE == 0:
                 if countsites > 0:
                     outl += siteline + "</tr>\n"
+                    outl += seedsiteline + "</tr>\n"
                     outl += seedline + "</tr>\n"
                     outl += ml1line  + "</tr>\n"
                     outl += ml2line  + "</tr>\n"
                     outl += "</table>"
-                outl += "<table>"   
-                siteline = "<tr><td style='smalltext'>site:</td>"
-                seedline = "<tr><td style='smalltext'>" + ap.params["msa_seedseq"] + "</td>"
-                ml1line = "<tr><td style='smalltext'>Anc #1:</td>"
-                ml2line = "<tr><td style='smalltext'>Anc #2:</td>"
-                countsites = 0
-            if (seed[site] != "-") or (ml1[site] != "-") or (ml2[site] != "-"):            
+                    outl += "<hr class='verythinhr'>"
+                    #outl += "<br>"
+                outl += "<table width='100%' align='left'>"   
+                siteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + msaprettyprint + "</em></td>"
+                seedsiteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + seedname + "</em></td>"                
+                seedline = "<tr  align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + seedname + "</strong></td>"
+                ml1line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + this_ancname + "</strong></td>"
+                ml2line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + that_ancname + "</strong></td>"
+                #siteline = "<tr><td class='smalltext' align='right' ><strong>sites:</strong></td>"
+                #seedline = "<tr><td class='smalltext' align='right' ><strong>" + seedname + "</strong></td>"
+                #ml1line = "<tr><td class='smalltext' align='right' ><strong>" + this_ancname + "</strong></td>"
+                #ml2line = "<tr><td class='smalltext' align='right' ><strong>" + that_ancname + "</strong></td>"
+
+                countsites = 1
+            if (seed[msasite-1] != "-") or (ml1[msasite-1] != "-") or (ml2[msasite-1] != "-"):            
                 this_style = "whitetd"
-                if site in redsites:
+                if (msasite) in redsites:
                     this_style = "redtd"
-                if site in orangesites:
+                if (msasite) in orangesites:
                     this_style = "orangetd"
-                if site in greensites:
+                if (msasite) in greensites:
                     this_style = "bluetd"
-                siteline += "<td align='center' class=\"" + this_style + "\">" + site.__str__() + "</td>"
-                seedline += "<td align='center' class=\"" + this_style + "\">" + seed[site] + "</td>"
-                ml1line += "<td align='center' class=\"" + this_style + "\">" + ml1[site] + "</td>"
-                ml2line += "<td align='center' class=\"" + this_style + "\">" + ml2[site] + "</td>"
+                if (msasite) in indelsites:
+                    this_styl1 = "indeltd"
+                #sitepad = ""
+                #if site < 1000 and site > 100:
+                #    sitepad = "&nbsp;"
+                #elif site < 100 and site > 10:
+                #    sitepad = "&nbsp;&nbsp;"
+                #elif site < 10:
+                #    sitepad = "&nbsp;&nbsp;&nbsp;"
+                #print "740:", ap.params["msa_mysite2seedsite"]
+                siteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (site).__str__() + "</td>"
+                seedsiteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (seedsite).__str__() + "</td>"
+                seedline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + seed[msasite-1] + "</td>"
+                ml1line += "<td  width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml1[msasite-1] + "</td>"
+                ml2line += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml2[msasite-1] + "</td>"
+                #siteline += "<td  align='center' class=\"" + this_style + "\">" + (site).__str__() + "</td>"
+                #seedline += "<td  align='center' class=\"" + this_style + "\">" + seed[msasite-1] + "</td>"
+                #ml1line += "<td  align='center' class=\"" + this_style + "\">" + ml1[msasite-1] + "</td>"
+                #ml2line += "<td  align='center' class=\"" + this_style + "\">" + ml2[msasite-1] + "</td>"
                 countsites += 1
-            if site == seed.__len__()-1:
+            #else:
+                # skipping this site, because it's a gap in the seed and both ancestors.
+                #print "758: skipping this site.", msa, site, msasite, seedsite
+            
+            if site == sites[ sites.__len__()-1 ]:
                 outl += siteline + "</tr>\n"
+                outl += seedsiteline + "</tr>\n"
                 outl += seedline + "</tr>\n"
                 outl += ml1line  + "</tr>\n"
                 outl += ml2line  + "</tr>\n"
                 outl += "</table>\n"
+    
         fout.write(outl + "\n")
         fout.close()
    
@@ -785,7 +862,7 @@ def count_changes_between_ancestors(patha, pathb, msanick):
 
     for site in sites:
         if site in ap.params["rsites"][msanick]:            
-            rowcolor = "None"
+            rowcolor = ""
             nsites += 1
             indel = False
             red = False
@@ -819,6 +896,8 @@ def count_changes_between_ancestors(patha, pathb, msanick):
             elif (anc_data[pathb][site][b_state] < 0.8 and anc_data[patha][site][b_state] > 0.8) or (anc_data[pathb][site][b_state] > 0.8 and anc_data[patha][site][b_state] < 0.8):
                     green = True
                     rowcolor = "green"
+            
+            #print "839:", site, rowcolor, a_state, b_state, #anc_data[patha][site], #anc_data[pathb][site], msanick
             
             if indel:
                 indelsites.append(site)
@@ -1479,10 +1558,10 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
             for refsite in score_refsites[h]:
                 lout = "--> "
                 lout += " " + method + " = %.3f"%h
-                lout += " rank: " + (i+1).__str__()
+                lout += "\trank= " + (i+1).__str__()
                 #print ap.params["msa_mysite2seedsite"]
                 #exit()
-                lout += " seed site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()              
+                lout += "\t[[ site in " + ap.params["seed"] + ": " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__() + " ]]"              
                 lout += "\n" 
                 header_lout = ""
                 header_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
@@ -1497,7 +1576,7 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                     right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
                 else:
                     right = "-"
-                lout += "\tseed context: " + left + here + right + "\n"
+                lout += "\tsequence context: " + left + here + right + "\n"
                 for msa in ap.params["msa_comparisons"]:
                     if refsite in ap.params["msa_refsite2mysite"][msa]:
                         mys = ap.params["msa_refsite2mysite"][msa][refsite]
@@ -1654,7 +1733,7 @@ def plot_histogram(metric_data, image_type="pdf"):
         # New style, drawing each bar with rect()
         xmax = roundup(maxx, 1.0)
         xmin = roundup(minx, 1.0)
-        cranstr += "plot(c(" + roundup(xmin,2.0).__str__() + "," + roundup(xmax, 2.0).__str__() + "), c(0,20), type='n',xlab='" + metric + " score', ylab='N sites', main='" + metric + " histogram " + time.asctime().__str__() + "',lwd=2, las=1, col='black', bty='n');\n"
+        cranstr += "plot(c(" + roundup(xmin,2.0).__str__() + "," + roundup(xmax, 2.0).__str__() + "), c(0,20), type='n',xlab='" + metric + " score', ylab='N sites', main='" + metric + " histogram',lwd=2, las=1, col='black', bty='n');\n"
         for bin in bins:
             colstr = "black"
             
@@ -1911,7 +1990,7 @@ def smooth_data(metric_blendeddata):
             combo_substring = ""
             if False != ap.getOptionalArg("--combo_method"):
                 combo_substring = ", " + ap.getOptionalArg("--combo_method")
-            plot_title = metric + " score, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
+            plot_title = metric + " score across sequence" #winsize = " + w.__str__() + combo_substring + ""
             cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black", image_type="pdf")
             cranpaths.append(cranpath)  
             cranpath = plot_one_metric( w_metric_blendeddata[w][metric], plot_outpath, plot_title, metric + " score", "black", image_type="png")
@@ -1921,7 +2000,7 @@ def smooth_data(metric_blendeddata):
         # Plot the site-by-metric, normalized, for all metrics on one plot.
         #
         multi_plot_outpath = get_plot_outpath(ap, tag=("all-by-site.w=" + w.__str__()) )
-        plot_title = "All metrics, normalized, winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
+        plot_title = "All metrics, normalized" #winsize = " + w.__str__() + combo_substring + ", " + time.asctime().__str__() + ""
         cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title,image_type="pdf")
         cranpaths.append(cranpath)
         cranpath = plot_multi_metrics(w_metric_blendeddata[w], multi_plot_outpath, plot_title, image_type="png")

@@ -140,11 +140,7 @@ else:
 #Part 6:
 #If specified, visualize H scores on PyMol structure...
 #"""
-if False != ap.getOptionalArg("--pdb_path"):
-    #refseq = # the ML sequence of the ancestor
-    # ap.params["msa_seedseq"][ap.params["longest_msa"]
-    # ap.params["msa_comparisons"][lnick][1]
-    
+if "pdb" in ap.params and "pymol_exe" in ap.params:    
     do_pymol_viz(ap, metric_blendeddata)
 
 
