@@ -86,7 +86,7 @@ if ap.params["metrics"].__len__() > 1: # plural. . .
 else: # . . . or singular
     print "\n. I'm comparing ancestors using the metric", ap.params["metrics"][0]    
 
-metric_data = compare_ancestors() # metric_data[metric][msa nickname][site] = score
+metric_data = compare_ancestors(ap) # metric_data[metric][msa nickname][site] = score
 
 """
 Part 4:
@@ -97,26 +97,29 @@ for metric in ap.params["metrics"]:
     print "\n. I'm integrating the data for", metric, "from across all the alignments."
     metric_blendeddata[metric] = blend_msa_data(metric_data[metric])
 
+# Save the data to the ap, for easy passing around to functions.
+ap.params["metric_blendeddata"] = metric_blendeddata
+ap.params["metric_data"] = metric_data
 
 """
 Part 5: Write output tables and plot PDFs.
 
 Part 5a: Write a summary table with all sites and their scores.
 """
-metric_ranked = rank_all(metric_data, metric_blendeddata)
-write_summary_table(metric_blendeddata, metric_data, metric_ranked)
+ap.params["metric_ranked"] = rank_all(ap)
+write_summary_table(ap)
 
 """
 Part 5b: Rank the sites, and correlate metrics (only if multiple metrics were used).
 """
 cranpaths = []  # this array will hold paths to R scripts that we'll execute (in R) at the end. 
-cranpaths += correlate_all(metric_ranked, metric_blendeddata)
+cranpaths += correlate_all(ap)
 
 """
-Part 5c: Smooth the data, using a user-specified window.
+Part 5c: Smooth the data for visualization, using a user-specified window.
          Scripts for R plots are also written in this method. . .
 """       
-cranpaths += smooth_data(metric_blendeddata)     
+cranpaths += smooth_data(ap)     
 
 
 """
@@ -141,7 +144,7 @@ else:
 #If specified, visualize H scores on PyMol structure...
 #"""
 if "pdb" in ap.params and "pymol_exe" in ap.params:    
-    do_pymol_viz(ap, metric_blendeddata)
+    do_pymol_viz(ap)
 
 
 #

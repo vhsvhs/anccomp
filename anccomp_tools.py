@@ -77,6 +77,7 @@ def datpath_to_short(msapath):
     path = re.sub(".dat", "", path)
     return path
 
+
 ###################################################
 def get_seq_from_msa(seq, msapath):
     fin = open(msapath, "r")
@@ -113,6 +114,12 @@ def datline_2_pphash(line):
     h = fill_missing_states(h)
     return h
 
+def pphash_2_string(p):
+    out = ""
+    for state in p:
+        out += state
+        out += "(%.2f"%p[state] + ") "
+    return out
 
 def get_markov_model(ap):
     """Matrix files should contain a 19x19 matrix"""
@@ -635,10 +642,8 @@ def dat2seq(datpath, remove_indels=False):
     return mlseq
 
 
-
-def compare_ancestors():
+def compare_ancestors(ap):
     msa_changes = {} # key = msa nickname, value = output from the method 'count_changes_between_ancestors'
-    msa_htmlfrags = {}
     metric_data = {}
     for msanick in ap.params["msa_nick2path"]:
         this_ancpath = ap.params["msa_comparisons"][msanick][0]
@@ -668,13 +673,13 @@ def get_css_transform(x,y):
 def write_changes_summary(msa_changes):
     """Summarize the change counts in one table."""
     fout = open(get_output_dir(ap) + "/ancestral_changes.txt", "w")
-    header = "Alignment\tModel\tN sites\tIndel Events\tType 1 Events\tType 2 Events\tType 3 Events\n"
+    header = "Alignment\tModel\tIndels\tType 1\tType 2\tType 3\n"
     fout.write(header)
     for msa in msa_changes:
         alignment = msa.split(".")[0]
         model = msa.split(".")[1]
         [nsites, indelsites,  redsites, orangesites, greensites] = msa_changes[msa]
-        fout.write(alignment + "\t" + model + "\t" + nsites.__str__() + "\t" + indelsites.__len__().__str__() + "\t" + redsites.__len__().__str__() + "\t" + orangesites.__len__().__str__() + "\t" + greensites.__len__().__str__() + "\n")
+        fout.write(alignment + "\t" + model + "\t" + indelsites.__len__().__str__() + "\t" + redsites.__len__().__str__() + "\t" + orangesites.__len__().__str__() + "\t" + greensites.__len__().__str__() + "\n")
     fout.close()
     
     """Write a special HTML fragment, with highlighted sequences, for each model and alignment."""
@@ -844,6 +849,17 @@ def count_changes_between_ancestors(patha, pathb, msanick):
     anc_data[pathb] = dat2pp(pathb)
 
     #
+    #
+    #
+    fout = open(get_output_dir(ap) + "/ancestral_changes." + msanick + ".txt", "w")
+    seedname = ap.params["seed"].split(".")
+    if seedname.__len__() > 2:
+        seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+    fout.write("site in " + msanick + "\tsite in " + seedname + "\t")
+    fout.write("summary\tclass\tPP in " + patha + "\tPP in " + pathb + "\n")
+    
+
+    #
     # These variables will be filled with values over the duration
     # of this method. . .
     #
@@ -897,16 +913,55 @@ def count_changes_between_ancestors(patha, pathb, msanick):
                     green = True
                     rowcolor = "green"
             
+            
             #print "839:", site, rowcolor, a_state, b_state, #anc_data[patha][site], #anc_data[pathb][site], msanick
+            if indel or red or orange:
+                if site in ap.params["msa_mysite2seedsite"][msanick]:
+                    seedsite = ap.params["msa_mysite2seedsite"][msanick][site]
+                else:
+                    seedsite = "X"    
+                fout.write(site.__str__() + "\t")
+                fout.write(seedsite.__str__() + "\t")
+                if a_state == None:
+                    a_state = "-"
+                if b_state == None:
+                    b_state = "-"
+                fout.write(a_state + " -> " + b_state + "\t")
+            
             
             if indel:
                 indelsites.append(site)
+                fout.write("indel\t")
             if red:
                 redsites.append(site)
+                fout.write("type 1\t")
             if orange:
                 orangesites.append(site)
-            if green:
-                greensites.append(site)        
+                fout.write("type 2\t")
+            #if green:
+            #    greensites.append(site) 
+            #    fout.write("type 3\t")
+
+            if indel or red or orange:
+                fout.write( pphash_2_string(anc_data[patha][site]) )
+                fout.write("\t")
+                fout.write( pphash_2_string(anc_data[pathb][site]) )
+                fout.write("\n")
+    
+    fout.close()
+    
+    if "indelsites" not in ap.params:
+        ap.params["indelsites"] = {}
+    if "redsites" not in ap.params:
+        ap.params["redsites"] = {}
+    if "orangesites" not in ap.params:
+        ap.params["orangesites"] = {}
+    if "greensites" not in ap.params:
+        ap.params["greensites"] = {}
+    ap.params["indelsites"][msanick] = indelsites
+    ap.params["redsites"][msanick] = redsites
+    ap.params["orangesites"][msanick] = orangesites
+    ap.params["greensites"][msanick] = greensites
     return [nsites, indelsites, redsites, orangesites, greensites]
     
 
@@ -1441,7 +1496,11 @@ def blend_msa_data(msa_data):
     return bdata
 
 
-def write_summary_table(data, msa_scores, metric_ranked):
+def write_summary_table(ap):
+    data = ap.params["metric_blendeddata"]
+    msa_scores = ap.params["metric_data"]
+    metric_ranked = ap.params["metric_ranked"]
+    
     foutpath = get_table_outpath(ap, tag="summary.txt")
     print "\n. I'm writing a table with all scores to", foutpath
     fout = open(foutpath, "w")
@@ -1497,14 +1556,16 @@ def write_summary_table(data, msa_scores, metric_ranked):
             fout.write(line)
     fout.close()
 
-def rank_all(metric_data, metric_blendeddata):
+def rank_all(ap):
     metric_ranked = {}
     for i in ap.params["metrics"]:
         print "\n. I'm ranking the data for", i, "from across all the alignments."
-        metric_ranked[i] = rank_sites(metric_blendeddata[i], metric_data[i], method=i)
+        metric_ranked[i] = rank_sites(ap.params["metric_blendeddata"][i], ap.params["metric_data"][i], method=i)
     return metric_ranked
         
-def correlate_all(metric_ranked, metric_blendeddata):
+def correlate_all(ap):
+    metric_ranked = ap.params["metric_ranked"]
+    metric_blendeddata = ap.params["metric_blendeddata"]
     cranpaths = [] # a list of R scripts that will be executed.
     if False == ap.doesContainArg("--skip_correlation"):
         if ap.params["metrics"].__len__() > 1:
@@ -1948,7 +2009,8 @@ def plot_correlation(data, outpath, title, color, xlab=None, ylab=None, memo=Non
     cranout.close()
     return cranpath    
 
-def smooth_data(metric_blendeddata):
+def smooth_data(ap):
+    metric_blendeddata = ap.params["metric_blendeddata"]
     w_metric_blendeddata = {} # key = window size for smoothing, value = hashtable, where key = metric ID, value = blended data
     cranpaths = []
     for w in ap.params["winsizes"]:    
