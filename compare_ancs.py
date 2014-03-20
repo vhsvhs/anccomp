@@ -40,7 +40,6 @@
 
 from config import *
 from anccomp_tools import *
-from pymol_viz import *
 from html_report import *
 
 show_splash()
@@ -144,6 +143,7 @@ else:
 #If specified, visualize H scores on PyMol structure...
 #"""
 if "pdb" in ap.params and "pymol_exe" in ap.params:    
+    from pymol_viz import *
     do_pymol_viz(ap)
 
 

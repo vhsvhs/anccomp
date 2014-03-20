@@ -196,6 +196,11 @@ def read_cli(ap):
         
     if ap.doesContainArg("--pymol_exe"):
         ap.params["pymol_exe"] = ap.getArg("--pymol_exe")
+        
+    if ap.doesContainArg("--skip_html"):
+        ap.params["skip_html"] = True
+    else:
+        ap.params["skip_html"] = False
     
 def read_specs(ap):
     """Read specifications given in the spec. file (using the --specpath command)."""
@@ -227,16 +232,6 @@ def read_specs(ap):
             check_msa(msapath)
             ap.params["msa_path2nick"][ msapath ] = msanick
             ap.params["msa_nick2path"][ msanick ] = msapath
-        # "msapaths" is depricated in the spec files, but I'm keeping in the
-        # code for legacy-support reasons.
-#         if l.startswith("msapaths"):
-#             tokens = l.split()
-#             for t in tokens[1:]:
-#                 ap.params["msa_path2nick"][t] = t
-        #if l.startswith("pdb"): # pdb pdb_path homologous_anc_path
-        #    tokens = l.split(0)
-        #    ap.params["pdbpaint"] = {}
-        #    ap.params["pdbpaint"][ tokens[1] ] = tokens[2]
         elif l.startswith("pdb"):
             tokens = l.split()
             pdb_path = tokens[1]
@@ -682,6 +677,10 @@ def write_changes_summary(msa_changes):
         fout.write(alignment + "\t" + model + "\t" + indelsites.__len__().__str__() + "\t" + redsites.__len__().__str__() + "\t" + orangesites.__len__().__str__() + "\t" + greensites.__len__().__str__() + "\n")
     fout.close()
     
+    if ap.params["skip_html"]:
+        return
+    
+    
     """Write a special HTML fragment, with highlighted sequences, for each model and alignment."""
     for msa in msa_changes:
         [nsites, indelsites,  redsites, orangesites, greensites] = msa_changes[msa]
@@ -691,6 +690,7 @@ def write_changes_summary(msa_changes):
         ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
         seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
         
+
         this_ancname = this_ancpath.split(".")[ this_ancpath.split(".").__len__()-2 ]
         this_ancname = this_ancname.split("/")[1]
         that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
@@ -855,7 +855,7 @@ def count_changes_between_ancestors(patha, pathb, msanick):
     seedname = ap.params["seed"].split(".")
     if seedname.__len__() > 2:
         seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
-    fout.write("site in " + msanick + "\tsite in " + seedname + "\t")
+    fout.write("site in " + msanick + "\tsite in " + ap.params["seed"] + "\t")
     fout.write("summary\tclass\tPP in " + patha + "\tPP in " + pathb + "\n")
     
 
