@@ -19,7 +19,6 @@ PDIST_WEIGHT = 1.0
 KDIST_WEIGHT = 1.0
 
 
-
 # set is an array of floats
 def mean(set):
     if set.__len__() == 0:
@@ -1598,20 +1597,33 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
     
     hscores = score_refsites.keys()
     hscores.sort(reverse=True)
+    sdev = sd(hscores)
+    avg = mean(hscores)
 
     msa_thatanc_lines = {}
     msa_thisanc_lines = {}
     for msa in ap.params["msa_comparisons"]:
+        msa_thatanc_lines[msa] = {}
+        msa_thisanc_lines[msa] = {}
+        
         that_ancpath = ap.params["msa_comparisons"][msa][0]
         fin = open(that_ancpath, "r")
-        msa_thatanc_lines[msa] = fin.readlines()
+        for l in fin.xreadlines():
+            site = int( l.split()[0] )
+            msa_thatanc_lines[msa][site] = l
         fin.close()
+        
         this_ancpath = ap.params["msa_comparisons"][msa][1]
         fin = open(this_ancpath, "r")
-        msa_thisanc_lines[msa] = fin.readlines() 
+        for l in fin.xreadlines():
+            site = int( l.split()[0] )
+            msa_thisanc_lines[msa][site] = l 
         fin.close()
         
     if writetable == True:
+        """This is slightly confusing... data meant for XX.ranked.txt gets written directly
+        to the file via 'fout', while data meant for XX.details.txt gets cached in outlines,
+        as an array of output lines."""
         fout = open( get_table_outpath(ap, tag=method+".ranked.txt"), "w")
         outlines = []
         for i in range(0, hscores.__len__()):
@@ -1628,26 +1640,58 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 header_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
                 header_lout += "\t" + method + "= " + "%.3f"%h
                 header_lout += "\trank: " + (i+1).__str__()
+                header_lout += "\tdeviation= %.3f"%( (h-avg)/sdev )
                 fout.write(header_lout + "\n")
                 
                 #print "1395:", refsite, ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__()
+                """Get the context in the seed sequence. Sorry for the complicated array references."""
                 left = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-2]
                 here = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite-1]
                 if refsite < ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__():
                     right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
                 else:
                     right = "-"
-                lout += "\tsequence context: " + left + here + right + "\n"
+                lout += ". context in " + ap.params["seed"] + " : " + left + here + right + "\n"
+                
+#                 """Get the context in the ancestral sequence."""
+#                 left = ""
+#                 here = ""
+#                 right = ""
+#                 for l in msa_thatanc_lines[ap.params["longest_msa"]]:
+#                     if refsite > 1:    
+#                         if l.startswith( (refsite-2).__str__()):
+#                             left = l.split()[1]
+#                     if l.startswith( (refsite-1).__str__()):
+#                         here = l.split()[1]
+#                     if l.startsiwht( refsite.__str__()):
+#                         right = l.split()[1]
+#                 lout += ". context in " + ap.params["seed"] + " : " + left + here + right + "\n"
+
+                
+                
+                """Get the PP support for the two ancestors."""
                 for msa in ap.params["msa_comparisons"]:
                     if refsite in ap.params["msa_refsite2mysite"][msa]:
                         mys = ap.params["msa_refsite2mysite"][msa][refsite]
-                        lout += msa + " site " + mys.__str__() + " (" + method + " = %.3f"%msa_scores[msa][mys] + ")\n"
-                        for l in msa_thatanc_lines[msa]:
-                            if l.startswith(mys.__str__() + " "):
-                                lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][0]) + "\tsite " + re.sub("site ", "", l)
-                        for l in msa_thisanc_lines[msa]:
-                            if l.startswith(mys.__str__() + " "):
-                                lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][1]) + "\tsite " + re.sub("site ", "", l)
+                        
+                        left = ""
+                        here = ""
+                        right = ""
+                        if (mys-1) in msa_thisanc_lines[msa]:
+                            left = msa_thisanc_lines[msa][mys-1].split()[1]
+                        if (mys) in msa_thisanc_lines[msa]:
+                            here = msa_thisanc_lines[msa][mys].split()[1]
+                        if (mys+1) in msa_thisanc_lines[msa]:
+                            right = msa_thisanc_lines[msa][mys+1].split()[1]
+                        context = left + here + right
+                        
+                        lout += msa + " site " + mys.__str__() + " (" + method + " = %.3f"%msa_scores[msa][mys] + ") (context: " + context + ")\n"
+                        #for  in msa_thatanc_lines[msa]:
+                        l = msa_thatanc_lines[msa][mys]
+                        lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][0]) + "\tsite " + re.sub("site ", "", l)
+                        #for l in msa_thisanc_lines[msa]:
+                        l = msa_thisanc_lines[msa][mys]
+                        lout += "   " + datpath_to_short(ap.params["msa_comparisons"][msa][1]) + "\tsite " + re.sub("site ", "", l)
                 lout += "\n"
                 outlines.append(lout)
         fout.close()
