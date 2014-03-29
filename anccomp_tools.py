@@ -779,9 +779,9 @@ def write_changes_summary(msa_changes):
             if site == sites[ sites.__len__()-1 ]:
                 outl += siteline + "</tr>\n"
                 outl += seedsiteline + "</tr>\n"
-                outl += seedline + "</tr>\n"
                 outl += ml1line  + "</tr>\n"
                 outl += ml2line  + "</tr>\n"
+                outl += seedline + "</tr>\n"
                 outl += "</table>\n"
     
         fout.write(outl + "\n")
@@ -1495,7 +1495,7 @@ def blend_msa_data(msa_data):
     return bdata
 
 
-def write_summary_table(ap):
+def write_summary(ap):
     data = ap.params["metric_blendeddata"]
     msa_scores = ap.params["metric_data"]
     metric_ranked = ap.params["metric_ranked"]
@@ -1554,6 +1554,99 @@ def write_summary_table(ap):
             line += "\n"
             fout.write(line)
     fout.close()
+    
+
+    #
+    # Write an HTML fragment for asrpipeline
+    # To-do: this code should eventually be removed and rewritten within the asr-pipeline
+    # 
+    """   
+    this_ancpath = ap.params["msa_comparisons"][msa][0]
+    that_ancpath = ap.params["msa_comparisons"][msa][1]
+    ml1 = get_ml_sequence_from_file(this_ancpath, getindels=True)
+    ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
+    seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
+    
+    this_ancname = this_ancpath.split(".")[ this_ancpath.split(".").__len__()-2 ]
+    this_ancname = this_ancname.split("/")[1]
+    that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
+    that_ancname = that_ancname.split("/")[1]
+    
+    seedname = ap.params["seed"].split(".")
+    if seedname.__len__() > 2:
+        seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+    
+    CHARS_PER_LINE = 30
+    labelwidth = 18 # percent
+    colwidth = 82.0 / CHARS_PER_LINE
+    fout = open( get_table_outpath(ap, tag="Df." + msa+".summary.html"), "w")
+    
+    # Fill outl with output lines, then dump it to disk.
+    outl = ""
+    countsites = 0
+    #print "685:", ap.params["msa_refsite2mysite"][msa]
+    #for site in range(1, seed.__len__()+1): # site points into the seed sequence.
+    
+    sites = ap.params["msa_refsite2mysite"][msa].keys()
+    sites.sort()
+    
+    msaprettyprint = msa.split(".")[0]
+    
+    for site in sites:
+        msasite = ap.params["msa_refsite2mysite"][msa][site]
+    if msasite in ap.params["msa_mysite2seedsite"][msa]:
+        seedsite = ap.params["msa_mysite2seedsite"][msa][msasite]
+    else:
+        seedsite = "X"
+    
+    if msasite not in  ap.params["metric_data"]["Df"][msa]:
+        continue
+    score = ap.params["metric_data"]["Df"][msa][msasite]
+    
+    if countsites%CHARS_PER_LINE == 0:
+        if countsites > 0:
+            outl += siteline + "</tr>\n"
+            outl += seedsiteline + "</tr>\n"
+            outl += seedline + "</tr>\n"
+            outl += ml1line  + "</tr>\n"
+            outl += ml2line  + "</tr>\n"
+            outl += "</table>"
+            outl += "<hr class='verythinhr'>"
+            #outl += "<br>"
+        outl += "<table width='100%' align='left'>"   
+        siteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + msaprettyprint + "</em></td>"
+        seedsiteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + seedname + "</em></td>"                
+        ml1line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + this_ancname + "</strong></td>"
+        ml2line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + that_ancname + "</strong></td>"
+        seedline = "<tr  align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + seedname + "</strong></td>"
+        scoreline = "<tr  align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>Df score</strong></td>"
+    
+        countsites = 1
+    if (seed[msasite-1] != "-") or (ml1[msasite-1] != "-") or (ml2[msasite-1] != "-"):            
+        this_style = "whitetd"
+    
+        siteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (site).__str__() + "</td>"
+        seedsiteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (seedsite).__str__() + "</td>"
+        ml1line += "<td  width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml1[msasite-1] + "</td>"
+        ml2line += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml2[msasite-1] + "</td>"
+        seedline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + seed[msasite-1] + "</td>"
+        scoreline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">%.3f"%score + "</td>"
+        countsites += 1
+    
+    if site == sites[ sites.__len__()-1 ]:
+        outl += siteline + "</tr>\n"
+        outl += seedsiteline + "</tr>\n"
+        outl += ml1line  + "</tr>\n"
+        outl += ml2line  + "</tr>\n"
+        outl += seedline + "</tr>\n"
+        outl += scoreline + "</tr>\n"
+        outl += "</table>\n"
+    
+    fout.write(outl + "\n")
+    fout.close()
+    """
+    
+
 
 def rank_all(ap):
     metric_ranked = {}
@@ -1579,6 +1672,150 @@ def correlate_all(ap):
                 for cranpath in correlate_metrics(metric_ranked[this_metric], metric_ranked[that_metric], metric_blendeddata[this_metric], metric_blendeddata[that_metric], this_metric + "-" + that_metric, xunit=this_metric, yunit=that_metric):
                     cranpaths.append( cranpath )
     return cranpaths
+
+def write_summary_indi(ap):
+    """Writes a file named <metric>.<alignment>.<model>.summary.txt"""
+    for msa in ap.params["msa_comparisons"]:
+        for metric in ap.params["metrics"]: 
+            data = ap.params["metric_data"][metric][msa]
+            sites = data.keys()
+            sites.sort()
+            
+            """Collect all the values and compute mean, st.dev."""
+            allscores = []
+            for site in sites:
+                allscores.append( data[site] )
+            sdev = sd(allscores)
+            avg = mean(allscores)
+            
+            """Calculate ranks on the scores"""
+            score_rank = {}
+            allscores.sort( reverse=True )
+            rank = 1
+            for score in allscores:
+                score_rank[score] = rank
+                rank += 1
+            
+            """Write one line for each site"""
+            fout = open( get_table_outpath(ap, tag=metric + "." + msa+".summary.txt"), "w")
+            for site in sites:
+                seedsite = ap.params["msa_mysite2seedsite"][msa][site]
+                lout = site.__str__()
+                lout += "\t"
+                lout += seedsite.__str__()
+                lout += "\t"
+                lout += "%.3f"%data[site] + "\t"
+                lout += score_rank[data[site]].__str__() + "\t"
+                lout += "%.3f"%( (data[site]-avg) / sdev )
+                lout += "\n"
+                fout.write( lout )
+            fout.close()
+
+            if metric == "Df":
+                #
+                # to-do: this following HTML writing routine should eventually be moved to
+                # the asr pipeline, which would grab data from the MySQl database
+                # and render the HTML on its own.
+                #
+                #
+                # Write an HTML fragment that will get used by asrpipeline
+                #
+                this_ancpath = ap.params["msa_comparisons"][msa][0]
+                that_ancpath = ap.params["msa_comparisons"][msa][1]
+                ml1 = get_ml_sequence_from_file(this_ancpath, getindels=True)
+                ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
+                seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
+                
+                this_ancname = this_ancpath.split(".")[ this_ancpath.split(".").__len__()-2 ]
+                this_ancname = this_ancname.split("/")[1]
+                that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
+                that_ancname = that_ancname.split("/")[1]
+                
+                seedname = ap.params["seed"].split(".")
+                if seedname.__len__() > 2:
+                    seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+                
+                CHARS_PER_LINE = 30
+                labelwidth = 18 # percent
+                colwidth = 82.0 / CHARS_PER_LINE
+                fout = open( get_table_outpath(ap, tag="Df." + msa+".summary.html"), "w")
+            
+                # Fill outl with output lines, then dump it to disk.
+                outl = ""
+                countsites = 0
+                #print "685:", ap.params["msa_refsite2mysite"][msa]
+                #for site in range(1, seed.__len__()+1): # site points into the seed sequence.
+                
+                sites = ap.params["msa_refsite2mysite"][msa].keys()
+                sites.sort()
+            
+                msaprettyprint = msa.split(".")[0]
+            
+                for site in sites:
+                    msasite = ap.params["msa_refsite2mysite"][msa][site]
+                    if msasite in ap.params["msa_mysite2seedsite"][msa]:
+                        seedsite = ap.params["msa_mysite2seedsite"][msa][msasite]
+                    else:
+                        seedsite = "X"
+                    
+                    if msasite not in  ap.params["metric_data"]["Df"][msa]:
+                        continue
+                    score = ap.params["metric_data"]["Df"][msa][msasite]
+        
+                    if countsites%CHARS_PER_LINE == 0:
+                        if countsites > 0:
+                            outl += siteline + "</tr>\n"
+                            outl += seedsiteline + "</tr>\n"
+                            outl += ml1line  + "</tr>\n"
+                            outl += ml2line  + "</tr>\n"
+                            outl += seedline + "</tr>\n"
+                            outl += scoreline + "</tr>\n"
+                            outl += "</table>"
+                            outl += "<hr class='verythinhr'>"
+                            #outl += "<br>"
+                        outl += "<table width='100%' align='left'>"   
+                        siteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + msaprettyprint + "</em></td>"
+                        seedsiteline = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><em>site in " + seedname + "</em></td>"                
+                        ml1line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + this_ancname + "</strong></td>"
+                        ml2line = "<tr align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + that_ancname + "</strong></td>"
+                        seedline = "<tr  align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>" + seedname + "</strong></td>"
+                        scoreline = "<tr  align='left'><td class='smalltext' align='right' width=\"" + labelwidth.__str__() + "\%\"><strong>Df score</strong></td>"
+            
+                        countsites = 1
+                    if (seed[msasite-1] != "-") or (ml1[msasite-1] != "-") or (ml2[msasite-1] != "-"):            
+                        this_style = "whitetd"
+        
+                        stylescore = abs(  (score-avg)/sdev  )
+                        if stylescore > 6:
+                            this_style = "redtd"
+                        elif stylescore > 4:
+                            this_style = "orangetd"
+                        elif stylescore > 2:
+                            this_style = "redtd"
+        
+        
+                        siteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (site).__str__() + "</td>"
+                        seedsiteline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + (seedsite).__str__() + "</td>"
+                        ml1line += "<td  width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml1[msasite-1] + "</td>"
+                        ml2line += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + ml2[msasite-1] + "</td>"
+                        seedline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + seed[msasite-1] + "</td>"
+                        scoreline += "<td width=\"" + colwidth.__str__() + "\%\" align='center' class=\"" + this_style + "\">" + "%.3f"%score + "</td>"
+                        countsites += 1
+          
+                    if site == sites[ sites.__len__()-1 ]:
+                        outl += siteline + "</tr>\n"
+                        outl += seedsiteline + "</tr>\n"
+                        outl += ml1line  + "</tr>\n"
+                        outl += ml2line  + "</tr>\n"
+                        outl += seedline + "</tr>\n"
+                        outl += scoreline + "</tr>\n"
+                        outl += "</table>\n"
+            
+                fout.write(outl + "\n")
+                fout.close()
+    
+    
+
 
 def rank_sites(blended_data, msa_scores, method="h", writetable=True):
     """This method takes the site-value data and orders the sites in ascending order.
@@ -1631,17 +1868,13 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
             for refsite in score_refsites[h]:
                 lout = "--> "
                 lout += " " + method + " = %.3f"%h
-                lout += "\trank= " + (i+1).__str__()
-                #print ap.params["msa_mysite2seedsite"]
-                #exit()
-                lout += "\t[[ site in " + ap.params["seed"] + ": " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__() + " ]]"              
-                lout += "\n" 
-                header_lout = ""
-                header_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
-                header_lout += "\t" + method + "= " + "%.3f"%h
-                header_lout += "\trank: " + (i+1).__str__()
-                header_lout += "\tdeviation= %.3f"%( (h-avg)/sdev )
-                fout.write(header_lout + "\n")
+                lout += "\trank= " + (i+1).__str__() + "\n"
+                ranked_lout = ""
+                ranked_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
+                ranked_lout += "\t" + method + "= " + "%.3f"%h
+                ranked_lout += "\trank: " + (i+1).__str__()
+                ranked_lout += "\tdeviation= %.3f"%( (h-avg)/sdev )
+                fout.write(ranked_lout + "\n")
                 
                 #print "1395:", refsite, ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__()
                 """Get the context in the seed sequence. Sorry for the complicated array references."""
@@ -1651,24 +1884,9 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                     right = ap.params["msa_seedseq"][ ap.params["longest_msa"] ][refsite]
                 else:
                     right = "-"
-                lout += ". context in " + ap.params["seed"] + " : " + left + here + right + "\n"
-                
-#                 """Get the context in the ancestral sequence."""
-#                 left = ""
-#                 here = ""
-#                 right = ""
-#                 for l in msa_thatanc_lines[ap.params["longest_msa"]]:
-#                     if refsite > 1:    
-#                         if l.startswith( (refsite-2).__str__()):
-#                             left = l.split()[1]
-#                     if l.startswith( (refsite-1).__str__()):
-#                         here = l.split()[1]
-#                     if l.startsiwht( refsite.__str__()):
-#                         right = l.split()[1]
-#                 lout += ". context in " + ap.params["seed"] + " : " + left + here + right + "\n"
-
-                
-                
+                lout += ". Site " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__() + " in " + ap.params["seed"] 
+                lout += " (context: " + left + here + right + ")\n"
+                             
                 """Get the PP support for the two ancestors."""
                 for msa in ap.params["msa_comparisons"]:
                     if refsite in ap.params["msa_refsite2mysite"][msa]:

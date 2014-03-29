@@ -84,7 +84,7 @@ def getpdbsites(ap):
             pdbsite += 1
     return pdbseqsite2refsite
 """
-    
+
 def do_pymol_viz(ap): 
     """ This method generates two different PyMOL visualizaitons.
     First, averaged Df, k, and p scores are painted onto the PDB, resulting in three output PyMOL *.pse sessions.
@@ -201,13 +201,17 @@ def do_pymol_viz(ap):
                 if h > 0:
                     #h = math.log(h)
                     red = 255
-                    green = math.sqrt((1 - (h-mingain)/(maxh-mingain) )) * 255
-                    blue =  math.sqrt((1 - (h-mingain)/(maxh-mingain) )) * 255
+                    green = (1 - (h-mingain)/(maxh-mingain) ) * 255
+                    blue =  (1 - (h-mingain)/(maxh-mingain) ) * 255
+                    #green = math.sqrt((1 - (h-mingain)/(maxh-mingain) )) * 255
+                    #blue =  math.sqrt((1 - (h-mingain)/(maxh-mingain) )) * 255
                 if h < 0:
                     #h = -1 * math.log( abs(h) )
                     blue = 255
-                    red =  math.sqrt((1 -(maxloss-h)/(maxloss-minh))) * 255
-                    green =  math.sqrt((1 -(maxloss-h)/(maxloss-minh))) * 255
+                    red =  (1 -(maxloss-h)/(maxloss-minh)) * 255
+                    green =  (1 -(maxloss-h)/(maxloss-minh)) * 255
+                    #red =  math.sqrt((1 -(maxloss-h)/(maxloss-minh))) * 255
+                    #green =  math.sqrt((1 -(maxloss-h)/(maxloss-minh))) * 255
                 if h < minh or h > maxh:
                     print "out of range", h
                     exit()

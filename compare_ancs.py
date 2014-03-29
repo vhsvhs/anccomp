@@ -106,7 +106,8 @@ Part 5: Write output tables and plot PDFs.
 Part 5a: Write a summary table with all sites and their scores.
 """
 ap.params["metric_ranked"] = rank_all(ap)
-write_summary_table(ap)
+write_summary(ap)
+write_summary_indi(ap)
 
 """
 Part 5b: Rank the sites, and correlate metrics (only if multiple metrics were used).
