@@ -44,47 +44,6 @@ def pymol_viz_helper(ap, data, seedseq):
     pass
 
 
-"""Depricated.
-def getpdbsites(ap):
-    # Get the PDB sequence:
-    pdb_path = ap.getOptionalArg("--pdb_path")
-    print "\n. I'm plotting scores onto the PDB file", pdb_path
-    pdb_seq = get_seq_from_pdb(pdb_path)
-    #print "\n. The PDB sequence is:\n", pdb_seq
-    
-    # Does the PDB sequence match the seed sequence?
-    #lnick = ap.params["msa_path2nick"][ ap.params["longest_msa"] ]
-    best_match_msanick = None
-    best_identity = 0
-    align2 = None
-    seq = None
-    if ap.params["msa_comparisons"].keys().__len__() > 1:
-        print "\n. I'm determining which MSA best matches the sequence in your PDB."
-    for msanick in ap.params["msa_comparisons"]:
-        this_seq = dat2seq( ap.params["msa_comparisons"][msanick][1] )
-        (this_identity, this_score, this_align1, this_align2, this_symbol) = needle(this_seq, pdb_seq)
-        #print msanick, this_identity
-        if this_identity > best_identity: # this sequence is a better match
-            seq = this_seq
-            best_match_msanick = msanick
-            best_identity = this_identity
-            align2 = this_align2
-            
-    pdbsites = get_pdb_sites(pdb_path) # a sorted list of site numbers in the PDB
-    
-    pdbseqsite2structsite = {} # key = pdb sequence site (1-based), value 
-    pdbseqsite2refsite = {} # key = 1-based pdb site number, value = 1-based ref site number
-    pdbsite = 0
-    for i in range(0, align2.__len__()):
-        if align2[i] != "-":
-            structsite = pdbsites[ pdbsite ]
-            pdbseqsite2structsite[pdbsite] = structsite
-            pdbseqsite2refsite[ pdbsite ] = i
-            #print "refsite:", i+1, seq[i], "pdbseqsite:", pdbsite+1, pdb_seq[pdbsite], "struct site:", structsite 
-            pdbsite += 1
-    return pdbseqsite2refsite
-"""
-
 def do_pymol_viz(ap): 
     """ This method generates two different PyMOL visualizaitons.
     First, averaged Df, k, and p scores are painted onto the PDB, resulting in three output PyMOL *.pse sessions.
@@ -249,6 +208,9 @@ def do_pymol_viz(ap):
             maxloss = None
             for site in data:
                 allvals.append( data[site] )
+            
+            if allvals.__len__() < 1:
+                continue
                 
             for i in range(0, allvals.__len__()):
                 ax = allvals[i]
@@ -263,6 +225,9 @@ def do_pymol_viz(ap):
                     elif maxloss < ax:
                         maxloss = ax
             
+            if mingain == None or maxloss == None:
+                continue
+            
             red = "red"
             orange = "orange"
             blue = "blue"
@@ -270,6 +235,8 @@ def do_pymol_viz(ap):
             
             maxh = max(allvals) 
             minh = min(allvals)
+            
+            #print "233:", maxh, minh, maxloss, mingain
     
             that_ancpath = ap.params["msa_comparisons"][msa][1]
             ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
