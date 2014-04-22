@@ -124,6 +124,10 @@ def get_markov_model(ap):
     """Matrix files should contain a 19x19 matrix"""
     filepath = ap.getArg("--modelpath")
     
+    if False == os.path.exists(filepath):
+        print "\n. Error: I can't find the Markov model at " + filepath
+        exit()
+    
     fin = open(filepath, "r")
     m = {}
     m_sum = 0.0
@@ -133,21 +137,25 @@ def get_markov_model(ap):
     curr_line = 1
     for l in lines:
         if l.__len__() > 3:
-            #print "line=",l
+            print "line=",l
             tokens = l.split()
             for i in range(0, tokens.__len__()):
-                #print "curr_line=", curr_line
+                print "curr_line=", curr_line
                 this = AA_ALPHABET[curr_line]
                 that = AA_ALPHABET[i]
                 val = float(tokens[i])
                 m_sum += val
                 m[ this ][ that ] = val
                 m[ that ][ this ] = val
-                #print this, that, val
-            curr_line += 1
+                print this, that, val
+            if tokens.__len__() > 0:
+                curr_line += 1
         if curr_line > (AA_ALPHABET.__len__() -1):
             break
     fin.close()
+    
+    for i in m:
+        print i, m[i]
     
     """Normalize m."""
     norm_m = {}
@@ -156,7 +164,7 @@ def get_markov_model(ap):
             norm_m[i] = {}
         for j in AA_ALPHABET:
             if i != j:
-                #print i, j
+                print i, j
                 if j not in norm_m:
                     norm_m[j] = {}
                 norm_m[i][j] = m[i][j] / m_sum
@@ -695,9 +703,11 @@ def write_changes_summary(msa_changes):
         that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
         that_ancname = that_ancname.split("/")[1]
         
-        seedname = ap.params["seed"].split(".")
-        if seedname.__len__() > 2:
-            seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+        seedname = ap.params["seed"]
+        seedtokens = ap.params["seed"].split(".")
+        if seedtokens.__len__() > 2:
+            seedname = seedtokens[0][0] + "." + seedtokens[1] + "." + seedtokens[2]
+        
         
         CHARS_PER_LINE = 30
         labelwidth = 18 # percent
@@ -1731,9 +1741,10 @@ def write_summary_indi(ap):
                 that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
                 that_ancname = that_ancname.split("/")[1]
                 
-                seedname = ap.params["seed"].split(".")
-                if seedname.__len__() > 2:
-                    seedname = seedname[0][0] + "." + seedname[1] + "." + seedname[2]
+                seedname = ap.params["seed"]
+                seedtokens = ap.params["seed"].split(".")
+                if seedtokens.__len__() > 2:
+                    seedname = seedtokens[0][0] + "." + seedtokens[1] + "." + seedtokens[2]
                 
                 CHARS_PER_LINE = 30
                 labelwidth = 18 # percent
