@@ -137,25 +137,22 @@ def get_markov_model(ap):
     curr_line = 1
     for l in lines:
         if l.__len__() > 3:
-            print "line=",l
+            #print "line=",l
             tokens = l.split()
             for i in range(0, tokens.__len__()):
-                print "curr_line=", curr_line
+                #print "curr_line=", curr_line
                 this = AA_ALPHABET[curr_line]
                 that = AA_ALPHABET[i]
                 val = float(tokens[i])
                 m_sum += val
                 m[ this ][ that ] = val
                 m[ that ][ this ] = val
-                print this, that, val
+                #print this, that, val
             if tokens.__len__() > 0:
                 curr_line += 1
         if curr_line > (AA_ALPHABET.__len__() -1):
             break
     fin.close()
-    
-    for i in m:
-        print i, m[i]
     
     """Normalize m."""
     norm_m = {}
@@ -164,7 +161,7 @@ def get_markov_model(ap):
             norm_m[i] = {}
         for j in AA_ALPHABET:
             if i != j:
-                print i, j
+                #print i, j
                 if j not in norm_m:
                     norm_m[j] = {}
                 norm_m[i][j] = m[i][j] / m_sum
@@ -228,6 +225,12 @@ def read_specs(ap):
             ap.params["seed"] = tokens[1]
         elif l.startswith("compare"):
             tokens = l.split()
+            if False == os.path.exists( tokens[1] ):
+                print "\n. Error, I can't find the ASR dat file at ", tokens[1]
+                exit(1)
+            if False == os.path.exists( tokens[1] ):
+                print "\n. Error, I can't find the ASR dat file at ", tokens[2]
+                exit(1)
             ap.params["msa_comparisons"][tokens[3]] = (tokens[1],tokens[2])
         elif l.startswith("msaweight"):
             tokens = l.split()
@@ -650,6 +653,12 @@ def compare_ancestors(ap):
     for msanick in ap.params["msa_nick2path"]:
         this_ancpath = ap.params["msa_comparisons"][msanick][0]
         that_ancpath = ap.params["msa_comparisons"][msanick][1]
+        if False == os.path.exists(this_ancpath):
+            print "\n. Error: AncComp: I cannot find the ASR DAT file at ", this_ancpath
+            exit(1)
+        if False == os.path.exists(that_ancpath):
+            print "\n. Error: AncComp: I cannot find the ASR DAT file at ", that_ancpath
+            exit(1)
         print "\n. . .I'm comparing the ancestor [", this_ancpath, "] to [", that_ancpath, "]."
     
         # Compare the ancestors in simple terms, by the number of amino acid changes and the number of indel changes, etc.
@@ -1707,12 +1716,17 @@ def write_summary_indi(ap):
                 rank += 1
             
             """Write one line for each site"""
+            print "1719:", ap.params["msa_seedseq"].keys()
+            print "1720:", ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]], ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]]
             fout = open( get_table_outpath(ap, tag=metric + "." + msa+".summary.txt"), "w")
             for site in sites:
                 seedsite = ap.params["msa_mysite2seedsite"][msa][site]
                 lout = site.__str__()
                 lout += "\t"
                 lout += seedsite.__str__()
+                lout += "\t"
+                print site, seedsite, (site in ap.params["rsites"][msa])
+                lout += ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]][site-1]
                 lout += "\t"
                 lout += "%.3f"%data[site] + "\t"
                 lout += score_rank[data[site]].__str__() + "\t"
