@@ -129,7 +129,7 @@ if False == ap.getOptionalToggle("--skip_plots"):
     fout = open("run_rscripts.sh", "w")
     for c in cranpaths:
         print "\n. I'm plotting results, using the R script written at [", c, "] . . ."
-        fout.write("r --no-save < " + c + "\n")
+        fout.write("r --no-save --slave --silent --quiet < " + c + "\n")
     fout.close()
     os.system("source run_rscripts.sh")
 else:

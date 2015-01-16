@@ -362,6 +362,7 @@ def align_msas():
         if msa_noindel[p] != msa_noindel[ longest_msa ]:
             print "\n. Sorry, I had to stop because the seed sequence is not the same in all your alignments."
             print ". Tip: Check if you used a truncated version of the seed sequence in one of the alignments."
+            print ". Tip #2: Compare", p, "to", longest_msa 
             print re.sub("\-", "", ap.params["msa_seedseq"][p])
             print re.sub("\-", "", ap.params["msa_seedseq"][longest_msa])
             exit()
@@ -706,8 +707,12 @@ def write_changes_summary(msa_changes):
         ml2 = get_ml_sequence_from_file(that_ancpath, getindels=True)        
         seed = ap.params["msa_seedseq"][ ap.params["msa_nick2path"][msa] ]
         
+        #print "710:", this_ancpath
 
         this_ancname = this_ancpath.split(".")[ this_ancpath.split(".").__len__()-2 ]
+        
+        #print "714:", this_ancname
+        
         this_ancname = this_ancname.split("/")[1]
         that_ancname = that_ancpath.split(".")[ that_ancpath.split(".").__len__()-2 ]
         that_ancname = that_ancname.split("/")[1]
@@ -1665,15 +1670,14 @@ def write_summary(ap):
     fout.close()
     """
     
-
-
 def rank_all(ap):
     metric_ranked = {}
     for i in ap.params["metrics"]:
         print "\n. I'm ranking the data for", i, "from across all the alignments."
         metric_ranked[i] = rank_sites(ap.params["metric_blendeddata"][i], ap.params["metric_data"][i], method=i)
     return metric_ranked
-        
+
+    
 def correlate_all(ap):
     metric_ranked = ap.params["metric_ranked"]
     metric_blendeddata = ap.params["metric_blendeddata"]
@@ -1704,8 +1708,12 @@ def write_summary_indi(ap):
             allscores = []
             for site in sites:
                 allscores.append( data[site] )
-            sdev = sd(allscores)
-            avg = mean(allscores)
+            if allscores.__len__() > 0:
+                sdev = sd(allscores)
+                avg = mean(allscores)
+            else:
+                sdev = 0.0
+                avg = None
             
             """Calculate ranks on the scores"""
             score_rank = {}
@@ -1716,8 +1724,8 @@ def write_summary_indi(ap):
                 rank += 1
             
             """Write one line for each site"""
-            print "1719:", ap.params["msa_seedseq"].keys()
-            print "1720:", ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]], ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]]
+            #print "1719:", ap.params["msa_seedseq"].keys()
+            #print "1720:", ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]], ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]]
             fout = open( get_table_outpath(ap, tag=metric + "." + msa+".summary.txt"), "w")
             for site in sites:
                 seedsite = ap.params["msa_mysite2seedsite"][msa][site]
@@ -1725,7 +1733,7 @@ def write_summary_indi(ap):
                 lout += "\t"
                 lout += seedsite.__str__()
                 lout += "\t"
-                print site, seedsite, (site in ap.params["rsites"][msa])
+                #print site, seedsite, (site in ap.params["rsites"][msa])
                 lout += ap.params["msa_seedseq"][ap.params["msa_nick2path"][msa]][site-1]
                 lout += "\t"
                 lout += "%.3f"%data[site] + "\t"
@@ -1898,7 +1906,10 @@ def rank_sites(blended_data, msa_scores, method="h", writetable=True):
                 ranked_lout += "Site: " + ap.params["msa_mysite2seedsite"][ ap.params["msa_path2nick"][ ap.params["longest_msa"] ] ][refsite].__str__()
                 ranked_lout += "\t" + method + "= " + "%.3f"%h
                 ranked_lout += "\trank: " + (i+1).__str__()
-                ranked_lout += "\tdeviation= %.3f"%( (h-avg)/sdev )
+                if sdev == 0.0:
+                    ranked_lout += "\tdeviation= None"
+                else:
+                    ranked_lout += "\tdeviation= %.3f"%( (h-avg)/sdev )
                 fout.write(ranked_lout + "\n")
                 
                 #print "1395:", refsite, ap.params["msa_seedseq"][ ap.params["longest_msa"] ].__len__()
@@ -2196,14 +2207,18 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
         if maval == 0.0 and mbval == 0.0:
             mark = 0
         rank_a_b.append( (hrank, prank, mark) )
-    spearmans =  ss.spearmanr(ma_ranked, mb_ranked)
-    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]), image_type="pdf")
+    spearmansR = 0.0
+    if ma_ranked.__len__() > 0 and mb_ranked.__len__() > 0:
+        spearmans =  ss.spearmanr(ma_ranked, mb_ranked)
+        if type(1.0) == type(spearmans):
+            spearmansR = spearmans[0]
+    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmansR), image_type="pdf")
     cranpaths.append( path )
-    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmans[0]), image_type="png")
+    path  = plot_correlation(rank_a_b, get_plot_outpath(ap, tag="corr-rank." + tag), tag + " rank correlation", "blue", xlab=xunit, ylab=yunit, memo=("Spearman: %.3f"%spearmansR), image_type="png")
     cranpaths.append( path )
 
     fout = open( get_plot_outpath(ap, tag="corr-rank." + tag) + ".txt" , "w")
-    fout.write( spearmans[0].__str__() + "\n")
+    fout.write( spearmansR.__str__() + "\n")
     for v in rank_a_b:
         fout.write( v[0].__str__() + "\t" + v[1].__str__() + "\n")
     fout.close()
@@ -2220,9 +2235,17 @@ def correlate_metrics(ma, mb, ma_site_val, mb_site_val, tag, xunit=None, yunit=N
         value_a_b.append( [ maval,mbval,mark ] )
         mavals.append(maval)
         mbvals.append(mbval)
-    pearsons = ss.pearsonr(mavals, mbvals)
-    pearsonsT = pearsons[0]
-    pearsonsP = pearsons[1]
+    
+    print "2240:", mavals, mbvals
+    
+    if mavals.__len__() > 0 and mbvals.__len__() > 0:
+        pearsons = ss.pearsonr(mavals, mbvals)
+        pearsonsT = pearsons[0]
+    else:
+        pearsonsT = 0.0
+    if type(pearsonsT) != type(1.0):
+        pearsonsT = 0.0
+    print "2247:", pearsonsT
     path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT), image_type="pdf")
     cranpaths.append( path )
     path  = plot_correlation(value_a_b, get_plot_outpath(ap, tag="corr-value." + tag), tag + "value correlation", "gray50", xlab=xunit, ylab=yunit, memo=("Pearson: %.3f"%pearsonsT), image_type="png" )
